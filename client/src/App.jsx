@@ -200,7 +200,7 @@ function App() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ currentPassword, newPassword })
+      body: JSON.stringify({ oldPassword: currentPassword, newPassword })
     });
     return response.ok;
   };

@@ -39,46 +39,46 @@ function Login({ onLogin }) {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>🔐 Remote Terminal</h1>
-        <p className="login-subtitle">Please sign in to continue</p>
+        <h1>🔐 远程终端管理</h1>
+        <p className="login-subtitle">请登录以继续</p>
 
-        {error && <div className="login-error">{error}</div>}
+        {error && <div className="login-error">用户名或密码错误</div>}
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="username">用户名</label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
+              placeholder="请输入用户名"
               required
               autoFocus
             />
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">密码</label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
+              placeholder="请输入密码"
               required
             />
           </div>
 
           <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? '登录中...' : '登录'}
           </button>
         </form>
 
         <div className="login-info">
-          <p>Default credentials:</p>
+          <p>默认账号：</p>
           <p>
-            Username: <code>admin</code> / Password: <code>admin</code>
+            用户名：<code>admin</code> / 密码：<code>admin</code>
           </p>
         </div>
       </div>

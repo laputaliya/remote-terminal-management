@@ -1,15 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
-function Terminal({ sessionId, ws, onClose, onRename, shell, compact = false }) {
+const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false }, ref) => {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
   const [isConnected, setIsConnected] = useState(true);
   const [sessionName, setSessionName] = useState(`Terminal ${sessionId.slice(0, 8)}`);
+
+  // 暴露 focus 方法给父组件
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      if (xtermRef.current) {
+        xtermRef.current.focus();
+      }
+    }
+  }));
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -90,6 +99,21 @@ function Terminal({ sessionId, ws, onClose, onRename, shell, compact = false }) 
       }
     });
 
+    // 处理特殊按键，让 Alt+数字/方向键事件冒泡到父组件用于切换终端
+    terminal.attachCustomKeyEventHandler((e) => {
+      // Alt + 数字键 或 Alt + 方向键 不阻止默认行为，让父组件处理
+      if (e.altKey && (
+        (e.key >= '0' && e.key <= '9') ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      )) {
+        return false; // 返回 false 让事件继续传播
+      }
+      return true; // 其他按键正常处理
+    });
+
     const handleResize = () => {
       if (fitAddonRef.current) {
         fitAddonRef.current.fit();
@@ -143,7 +167,7 @@ function Terminal({ sessionId, ws, onClose, onRename, shell, compact = false }) 
   }, [sessionId, ws]);
 
   const handleRename = () => {
-    const newName = prompt('输入新的终端名称:', sessionName);
+    const newName = prompt('输入新名称:', sessionName);
     if (newName && newName.trim()) {
       onRename(sessionId, newName.trim());
       setSessionName(newName.trim());
@@ -182,6 +206,6 @@ function Terminal({ sessionId, ws, onClose, onRename, shell, compact = false }) 
       <div className="terminal-body" ref={terminalRef}></div>
     </div>
   );
-}
+});
 
 export default Terminal;

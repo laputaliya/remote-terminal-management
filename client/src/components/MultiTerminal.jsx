@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Terminal from './Terminal';
 import './MultiTerminal.css';
 
@@ -22,6 +22,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
   const [focusedIndex, setFocusedIndex] = useState(0);
   const maxTerminals = LAYOUTS.find(l => l.id === layout)?.maxTerminals || 1;
   const isSingleMode = layout === '1';
+  const terminalRefs = useRef([]);
 
   // 保存布局到 localStorage
   const handleLayoutChange = (newLayout) => {
@@ -43,6 +44,13 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
     setFocusedIndex(0);
   }, [layout, maxTerminals, activeSessionIds, onSelectSession]);
 
+  // 聚焦到指定索引的终端
+  const focusTerminal = (index) => {
+    if (terminalRefs.current[index]) {
+      terminalRefs.current[index].focus();
+    }
+  };
+
   // 快捷键支持
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -52,6 +60,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
         const index = parseInt(e.key) - 1;
         if (index < maxTerminals) {
           setFocusedIndex(index);
+          focusTerminal(index);
         }
       }
       // Alt + 方向键 切换终端
@@ -59,17 +68,21 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
         const activeList = Array.from(activeSessionIds).slice(0, maxTerminals);
         if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
           e.preventDefault();
-          setFocusedIndex(prev => Math.max(0, prev - 1));
+          const newIndex = Math.max(0, focusedIndex - 1);
+          setFocusedIndex(newIndex);
+          focusTerminal(newIndex);
         } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
           e.preventDefault();
-          setFocusedIndex(prev => Math.min(activeList.length - 1, prev + 1));
+          const newIndex = Math.min(activeList.length - 1, focusedIndex + 1);
+          setFocusedIndex(newIndex);
+          focusTerminal(newIndex);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [maxTerminals, activeSessionIds]);
+  }, [maxTerminals, activeSessionIds, focusedIndex]);
 
   // 获取当前激活的终端列表
   const getActiveSessionsList = () => {
@@ -153,7 +166,10 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
             <div
               key={sessionId}
               className={`terminal-cell ${index === focusedIndex ? 'focused' : ''}`}
-              onClick={() => setFocusedIndex(index)}
+              onClick={() => {
+                setFocusedIndex(index);
+                focusTerminal(index);
+              }}
             >
               <div className="cell-header">
                 <div className="cell-title">
@@ -164,8 +180,8 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
                 <div className="cell-actions">
                   <button
                     className="cell-btn"
-                    onClick={() => onRenameSession(sessionId, prompt('New name:', session.name))}
-                    title="Rename"
+                    onClick={() => onRenameSession(sessionId, prompt('新名称:', session.name))}
+                    title="重命名"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -186,6 +202,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
               </div>
               <div className="cell-content">
                 <Terminal
+                  ref={(el) => { terminalRefs.current[index] = el; }}
                   sessionId={sessionId}
                   ws={ws}
                   onClose={onDeleteSession}
