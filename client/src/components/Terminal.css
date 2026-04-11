@@ -94,6 +94,11 @@
   overflow: hidden;
 }
 
+.terminal-body.compact {
+  padding: 4px;
+  height: 100%;
+}
+
 .terminal-body .xterm {
   height: 100%;
 }

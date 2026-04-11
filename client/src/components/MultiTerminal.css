@@ -1,0 +1,311 @@
+.multi-terminal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1e1e1e;
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  gap: 12px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout-selector {
+  display: flex;
+  gap: 4px;
+  background: #1e1e1e;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.layout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #858585;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.layout-btn:hover {
+  background: #3c3c3c;
+  color: #ccc;
+}
+
+.layout-btn.active {
+  background: #094771;
+  color: #fff;
+}
+
+.layout-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ccc;
+  font-size: 13px;
+}
+
+.user-info .username {
+  font-weight: 500;
+}
+
+.logout-btn {
+  padding: 6px 12px;
+  background: #c75450;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.logout-btn:hover {
+  background: #d75450;
+}
+
+.change-password-btn {
+  padding: 6px 12px;
+  background: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.change-password-btn:hover {
+  background: #1177bb;
+}
+
+.terminal-grid {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+/* 单终端 */
+.terminal-grid.layout-1 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+/* 左右分屏 */
+.terminal-grid.layout-2h {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+/* 上下分屏 */
+.terminal-grid.layout-2v {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* 四宫格 */
+.terminal-grid.layout-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* 上二下一 */
+.terminal-grid.layout-3t {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.terminal-grid.layout-3t .terminal-cell:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+/* 上一下二 */
+.terminal-grid.layout-3b {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.terminal-grid.layout-3b .terminal-cell:nth-child(1) {
+  grid-column: 1 / -1;
+}
+
+/* 左二右一 */
+.terminal-grid.layout-3l {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.terminal-grid.layout-3l .terminal-cell:nth-child(1) {
+  grid-row: 1 / -1;
+}
+
+/* 左一右二 */
+.terminal-grid.layout-3r {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.terminal-grid.layout-3r .terminal-cell:nth-child(3) {
+  grid-row: 1 / -1;
+  grid-column: 2;
+}
+
+.terminal-cell {
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.terminal-cell.focused {
+  border-color: #007acc;
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
+}
+
+.terminal-cell.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #252526;
+}
+
+.cell-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #666;
+}
+
+.cell-placeholder svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+.cell-placeholder span {
+  font-size: 14px;
+}
+
+.cell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #2d2d30;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.cell-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.cell-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #608b4e;
+}
+
+.cell-status.disconnected {
+  background: #f44747;
+}
+
+.cell-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.cell-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.cell-btn:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.cell-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cell-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 添加终端按钮 */
+.add-terminal-btn {
+  padding: 6px 12px;
+  background: #094771;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.add-terminal-btn:hover {
+  background: #1177bb;
+}
+
+.add-terminal-btn svg {
+  width: 14px;
+  height: 14px;
+}

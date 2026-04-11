@@ -36,9 +36,9 @@ for (const session of sessions) {
   }
 }
 
-export function handleWebSocket(ws, websocketServer) {
+export function handleWebSocket(ws, websocketServer, user) {
   wss = websocketServer;
-  let currentSessionId = null;
+  let currentSessionIds = new Set();
   let isAlive = true;
 
   ws.isAlive = true;
@@ -65,7 +65,7 @@ export function handleWebSocket(ws, websocketServer) {
           handleListSessions(ws);
           break;
         case 'attach':
-          handleAttachSession(ws, message);
+          handleAttachSession(ws, message, currentSessionIds);
           break;
         case 'delete':
           handleDeleteSession(ws, message);
@@ -81,16 +81,16 @@ export function handleWebSocket(ws, websocketServer) {
   });
 
   ws.on('close', () => {
-    if (currentSessionId) {
+    currentSessionIds.forEach(sessionId => {
       wss?.clients.forEach((client) => {
         if (client !== ws && client.readyState === 1) {
           client.send(JSON.stringify({
             type: 'session-detached',
-            sessionId: currentSessionId
+            sessionId
           }));
         }
       });
-    }
+    });
   });
 }
 
@@ -98,9 +98,12 @@ function handleCreateSession(ws, message) {
   const { name, shell } = message;
   const sessionId = createPty(null, shell);
 
+  // 自动生成名称
+  const autoName = `Terminal ${sessions.length + 1}`;
+
   const session = {
     id: sessionId,
-    name: name || `Terminal ${sessions.length + 1}`,
+    name: name || autoName,
     shell: shell || (process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'),
     createdAt: new Date().toISOString(),
     status: 'running'
@@ -140,11 +143,12 @@ function handleListSessions(ws) {
   }));
 }
 
-function handleAttachSession(ws, message) {
+function handleAttachSession(ws, message, currentSessionIds) {
   const { sessionId } = message;
   const session = sessions.find(s => s.id === sessionId);
 
   if (session) {
+    currentSessionIds.add(sessionId);
     const history = getOutputHistory(sessionId);
     ws.send(JSON.stringify({
       type: 'session-attached',

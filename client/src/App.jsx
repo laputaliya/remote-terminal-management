@@ -1,22 +1,60 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
-import Terminal from './components/Terminal';
+import MultiTerminal from './components/MultiTerminal';
+import Login from './components/Login';
 import './App.css';
 
-// 使用相对路径，WebSocket 会通过 Vite 代理或同源连接
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [username, setUsername] = useState(localStorage.getItem('username'));
   const [sessions, setSessions] = useState([]);
-  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [activeSessionIds, setActiveSessionIds] = useState(() => {
+    const saved = localStorage.getItem('active-session-ids');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar-collapsed') === 'true';
+  });
   const [wsStatus, setWsStatus] = useState('disconnected');
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  const handleToggleSidebar = () => {
+    const newState = !sidebarCollapsed;
+    setSidebarCollapsed(newState);
+    localStorage.setItem('sidebar-collapsed', String(newState));
+  };
 
-    const ws = new WebSocket(WS_URL);
+  // 保存激活的终端列表到 localStorage
+  const saveActiveSessionIds = (ids) => {
+    localStorage.setItem('active-session-ids', JSON.stringify(Array.from(ids)));
+  };
+
+  // 检查是否已登录
+  useEffect(() => {
+    if (token) {
+      // 验证 token 是否有效
+      fetch('/api/sessions', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(response => {
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          handleLogout();
+        }
+      }).catch(() => {
+        handleLogout();
+      });
+    }
+  }, [token]);
+
+  const connect = useCallback(() => {
+    if (!token || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    const ws = new WebSocket(`${WS_URL}?token=${token}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -31,19 +69,29 @@ function App() {
       switch (message.type) {
         case 'session-list':
           setSessions(message.sessions);
-          if (message.sessions.length > 0 && !activeSessionId) {
-            setActiveSessionId(message.sessions[0].id);
+          // 如果没有激活的会话，自动选择第一个
+          if (message.sessions.length > 0 && activeSessionIds.size === 0) {
+            setActiveSessionIds(new Set([message.sessions[0].id]));
           }
           break;
         case 'session-created':
           setSessions((prev) => [...prev, message.session]);
-          setActiveSessionId(message.session.id);
+          // 自动添加到激活列表
+          setActiveSessionIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(message.session.id);
+            saveActiveSessionIds(newSet);
+            return newSet;
+          });
           break;
         case 'session-deleted':
           setSessions((prev) => prev.filter((s) => s.id !== message.sessionId));
-          if (activeSessionId === message.sessionId) {
-            setActiveSessionId(null);
-          }
+          setActiveSessionIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(message.sessionId);
+            saveActiveSessionIds(newSet);
+            return newSet;
+          });
           break;
         case 'session-updated':
           setSessions((prev) =>
@@ -62,17 +110,43 @@ function App() {
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-  }, [activeSessionId]);
+  }, [token, activeSessionIds.size]);
 
   useEffect(() => {
-    connect();
+    if (isAuthenticated) {
+      connect();
+    }
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
       wsRef.current?.close();
     };
-  }, []);
+  }, [isAuthenticated, connect]);
+
+  const handleLogin = (newToken, newUsername) => {
+    setToken(newToken);
+    setUsername(newUsername);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).catch(() => {});
+
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('active-session-ids');
+    localStorage.removeItem('terminal-layout');
+    localStorage.removeItem('sidebar-collapsed');
+    setToken(null);
+    setUsername(null);
+    setIsAuthenticated(false);
+    setActiveSessionIds(new Set());
+    wsRef.current?.close();
+  };
 
   const handleCreateSession = (name, shell) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -87,9 +161,30 @@ function App() {
   };
 
   const handleRenameSession = (sessionId, name) => {
+    if (!name || !name.trim()) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'rename', sessionId, name }));
+      wsRef.current.send(JSON.stringify({ type: 'rename', sessionId, name: name.trim() }));
     }
+  };
+
+  const handleSelectSession = (sessionId, isSingleMode = false) => {
+    setActiveSessionIds((prev) => {
+      const newSet = new Set(prev);
+      if (isSingleMode) {
+        // 单屏模式：直接切换到选中的终端（替换当前激活的）
+        newSet.clear();
+        newSet.add(sessionId);
+      } else {
+        // 多屏模式：添加/移除终端
+        if (newSet.has(sessionId)) {
+          newSet.delete(sessionId);
+        } else {
+          newSet.add(sessionId);
+        }
+      }
+      saveActiveSessionIds(newSet);
+      return newSet;
+    });
   };
 
   const handleRefresh = () => {
@@ -98,77 +193,49 @@ function App() {
     }
   };
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const handleChangePassword = async (currentPassword, newPassword) => {
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    return response.ok;
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="app">
       <Sidebar
         sessions={sessions}
-        activeSessionId={activeSessionId}
-        onSelectSession={setActiveSessionId}
+        activeSessionIds={activeSessionIds}
+        onSelectSession={handleSelectSession}
         onCreateSession={handleCreateSession}
         onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
         onRefresh={handleRefresh}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
+        isSingleMode={localStorage.getItem('terminal-layout') === '1' || !localStorage.getItem('terminal-layout')}
       />
       <main className="main-content">
-        <div className="content-header">
-          <div className="connection-status">
-            <span className={`status-dot ${wsStatus}`}></span>
-            <span>{wsStatus === 'connected' ? '已连接' : '连接中...'}</span>
-          </div>
-          {activeSession && (
-            <div className="active-session-info">
-              当前终端: <strong>{activeSession.name}</strong>
-            </div>
-          )}
-        </div>
-        <div className="terminal-area">
-          {activeSession && wsRef.current ? (
-            <Terminal
-              key={activeSessionId}
-              sessionId={activeSessionId}
-              ws={wsRef.current}
-              onClose={handleDeleteSession}
-              onRename={handleRenameSession}
-              shell={activeSession.shell}
-            />
-          ) : (
-            <div className="no-session">
-              <div className="no-session-content">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                </svg>
-                <h2>选择或创建一个终端</h2>
-                <p>从左侧边栏选择一个已有的终端会话，或创建新的终端会话开始工作。</p>
-                <div className="features">
-                  <div className="feature">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="4 17 10 11 4 5" />
-                      <line x1="12" y1="19" x2="20" y2="19" />
-                    </svg>
-                    <span>真正的Shell终端</span>
-                  </div>
-                  <div className="feature">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                    </svg>
-                    <span>后台持续运行</span>
-                  </div>
-                  <div className="feature">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    <span>自动保存会话</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <MultiTerminal
+          sessions={sessions}
+          activeSessionIds={activeSessionIds}
+          onSelectSession={handleSelectSession}
+          onCreateSession={handleCreateSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+          ws={wsRef.current}
+          username={username}
+          onLogout={handleLogout}
+          onChangePassword={handleChangePassword}
+        />
       </main>
     </div>
   );

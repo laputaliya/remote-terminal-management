@@ -28,6 +28,7 @@ body {
   flex-direction: column;
   min-width: 0;
   background: #1e1e1e;
+  overflow: hidden;
 }
 
 .content-header {

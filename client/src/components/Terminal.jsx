@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
-function Terminal({ sessionId, ws, onClose, onRename, shell }) {
+function Terminal({ sessionId, ws, onClose, onRename, shell, compact = false }) {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
@@ -53,18 +53,32 @@ function Terminal({ sessionId, ws, onClose, onRename, shell }) {
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    // 发送 attach 消息来接收历史输出
-    ws.send(JSON.stringify({
-      type: 'attach',
-      sessionId
-    }));
+    // 等待 WebSocket 连接就绪后再发送消息
+    const sendAttachAndResize = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        // 延迟一点发送，确保 PTY 已创建
+        setTimeout(() => {
+          // 先发送 resize，让 PTY 创建时就使用正确的大小
+          ws.send(JSON.stringify({
+            type: 'resize',
+            sessionId,
+            cols: terminal.cols,
+            rows: terminal.rows
+          }));
 
-    ws.send(JSON.stringify({
-      type: 'resize',
-      sessionId,
-      cols: terminal.cols,
-      rows: terminal.rows
-    }));
+          // 再发送 attach 消息来接收历史输出
+          ws.send(JSON.stringify({
+            type: 'attach',
+            sessionId
+          }));
+        }, 100);
+      } else {
+        // 如果还没连接，等待连接后再发送
+        ws.addEventListener('open', sendAttachAndResize, { once: true });
+      }
+    };
+
+    sendAttachAndResize();
 
     terminal.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -135,6 +149,12 @@ function Terminal({ sessionId, ws, onClose, onRename, shell }) {
       setSessionName(newName.trim());
     }
   };
+
+  if (compact) {
+    return (
+      <div className="terminal-body compact" ref={terminalRef}></div>
+    );
+  }
 
   return (
     <div className="terminal-container">
