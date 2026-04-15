@@ -4,12 +4,13 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
-const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false }, ref) => {
+const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false, name }, ref) => {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
   const [isConnected, setIsConnected] = useState(true);
-  const [sessionName, setSessionName] = useState(`Terminal ${sessionId.slice(0, 8)}`);
+  const [sessionName, setSessionName] = useState(name || `Terminal ${sessionId.slice(0, 8)}`);
+  const isAttachedRef = useRef(false); // Track if session-attached received
 
   // 暴露 focus 方法给父组件
   useImperativeHandle(ref, () => ({
@@ -22,6 +23,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
 
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    // Reset attachment flag when ws changes (reconnect scenario)
+    isAttachedRef.current = false;
 
     const terminal = new XTerm({
       cursorBlink: true,
@@ -90,6 +94,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     sendAttachAndResize();
 
     terminal.onData((data) => {
+      // Only forward input after receiving session-attached
+      // This prevents xterm init sequences (like DA query) from being sent to PTY
+      if (!isAttachedRef.current) return;
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'input',
@@ -138,10 +145,11 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       if (message.type === 'output' && message.sessionId === sessionId) {
         terminal.write(message.data);
       } else if (message.type === 'session-attached' && message.sessionId === sessionId) {
-        // 写入历史输出
+        // Write history output first, then mark as attached
         if (message.history) {
           terminal.write(message.history);
         }
+        isAttachedRef.current = true; // Now allow input forwarding
       } else if (message.type === 'session-updated') {
         if (message.session.id === sessionId) {
           setSessionName(message.session.name);
@@ -195,7 +203,11 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
-          <button className="action-btn close-btn" onClick={() => onClose(sessionId)} title="关闭终端">
+          <button className="action-btn close-btn" onClick={() => {
+            if (confirm(`确定关闭终端 "${sessionName || sessionId.slice(0, 8)}"？`)) {
+              onClose(sessionId);
+            }
+          }} title="关闭终端">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />

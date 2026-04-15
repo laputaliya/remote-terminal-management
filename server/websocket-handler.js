@@ -98,8 +98,25 @@ function handleCreateSession(ws, message) {
   const { name, shell } = message;
   const sessionId = createPty(null, shell);
 
-  // 自动生成名称
-  const autoName = `Terminal ${sessions.length + 1}`;
+  // Generate unique terminal name
+  const generateUniqueName = () => {
+    // Extract existing terminal numbers
+    const existingNumbers = new Set();
+    for (const s of sessions) {
+      const match = s.name.match(/^Terminal (\d+)$/);
+      if (match) {
+        existingNumbers.add(parseInt(match[1], 10));
+      }
+    }
+    // Find first unused number starting from 1
+    let num = 1;
+    while (existingNumbers.has(num)) {
+      num++;
+    }
+    return `Terminal ${num}`;
+  };
+
+  const autoName = generateUniqueName();
 
   const session = {
     id: sessionId,

@@ -91,8 +91,10 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
 
 
 
-  const handleCloseCell = (sessionId) => {
-    onDeleteSession(sessionId);
+  const handleCloseCell = (sessionId, sessionName) => {
+    if (confirm(`确定关闭终端 "${sessionName}"？`)) {
+      onDeleteSession(sessionId);
+    }
   };
 
   const activeList = getActiveSessionsList();
@@ -190,7 +192,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
                   </button>
                   <button
                     className="cell-btn"
-                    onClick={() => handleCloseCell(sessionId)}
+                    onClick={() => handleCloseCell(sessionId, session.name)}
                     title="Close"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -208,6 +210,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
                   onClose={onDeleteSession}
                   onRename={onRenameSession}
                   shell={session.shell}
+                  name={session.name}
                   compact
                 />
               </div>
