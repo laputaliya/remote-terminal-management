@@ -14,6 +14,10 @@
 - 终端输出历史保留（最多 100,000 字符）
 - 终端切换快捷键（Alt+1/2/3/4，Alt+方向键）
 - 响应式设计，适配桌面和移动设备
+- 外部终端管理（连接现有 tmux/screen 会话）
+- 侧边栏图标模式（收起时显示状态指示点）
+- 唯一终端命名（自动分配 Terminal 1、2、3...）
+- 关闭终端确认对话框
 
 ## 技术栈
 
@@ -59,6 +63,7 @@ remote-terminal-management/
 │   ├── websocket-handler.js  # WebSocket 消息路由和处理
 │   ├── sessions.js           # 会话持久化（JSON 文件存储）
 │   ├── pty-manager.js        # PTY 进程生命周期管理
+│   ├── external-processes.js # 外部终端管理（tmux/screen）
 │   └── auth.js               # 认证、Token 管理、密码哈希
 ├── client/
 │   ├── src/
@@ -69,6 +74,8 @@ remote-terminal-management/
 │   │       ├── Terminal.jsx      # xterm.js 封装，处理 fit/resize
 │   │       ├── MultiTerminal.jsx # 布局管理器（8 种布局，快捷键）
 │   │       ├── Sidebar.jsx       # 会话列表，创建/删除/重命名控制
+│   │       ├── ExternalTerminal.jsx # 外部终端管理页面
+│   │       ├── ExternalTerminal.css # 外部终端样式
 │   │       └── Login.jsx         # 认证表单
 │   ├── index.html
 │   ├── vite.config.js        # Vite 配置，开发环境 API 代理
@@ -131,6 +138,10 @@ npm start  # 从 dist/ 提供静态文件，端口 3000
 | `resize` | 客户端 → 服务器 | 调整终端尺寸 |
 | `delete` | 客户端 → 服务器 | 终止终端会话 |
 | `rename` | 客户端 → 服务器 | 重命名会话 |
+| `list-external` | 客户端 → 服务器 | 请求外部终端列表 |
+| `attach-tmux` | 客户端 → 服务器 | 连接 tmux 会话 |
+| `attach-screen` | 客户端 → 服务器 | 连接 screen 会话 |
+| `detach-external` | 客户端 → 服务器 | 断开外部终端（保留会话） |
 | `session-list` | 服务器 → 客户端 | 响应 `list` |
 | `session-created` | 服务器 → 客户端 | 新会话通知 |
 | `session-attached` | 服务器 → 客户端 | 附着确认，包含历史 |
@@ -147,6 +158,7 @@ npm start  # 从 dist/ 提供静态文件，端口 3000
 | POST | `/api/auth/change-password` | 是 | 修改密码 |
 | GET | `/api/sessions` | 是 | 列出所有会话 |
 | DELETE | `/api/sessions/:id` | 是 | 通过 REST 删除会话 |
+| GET | `/api/external-terminals` | 是 | 获取外部终端列表（tmux/screen） |
 | GET | `/api/health` | 否 | 健康检查 |
 
 ## 开发规范
@@ -205,3 +217,24 @@ npm start  # 从 dist/ 提供静态文件，端口 3000
 | 添加布局选项 | `client/src/components/MultiTerminal.jsx` |
 | 修改会话持久化 | `server/sessions.js` |
 | 修改 PTY 行为 | `server/pty-manager.js` |
+| 修改外部终端功能 | `server/external-processes.js`、`client/src/components/ExternalTerminal.jsx` |
+
+## 外部终端管理
+
+### 功能说明
+外部终端管理功能允许连接到系统中现有的 tmux/screen 会话，实现统一管理。
+
+### 会话类型区分
+- **普通终端**：由应用创建的 PTY 进程，会持久化保存
+- **外部终端**：连接到现有 tmux/screen 会话，不持久化保存
+
+### 操作行为
+| 操作 | 普通终端 | 外部终端（tmux/screen） |
+|------|---------|------------------------|
+| 关闭终端（X） | 终止 PTY 进程 | 执行 `tmux kill-session` 或 `screen -X quit` |
+| 返回列表 | 无此操作 | 断开连接，会话继续运行 |
+
+### 技术要点
+- 外部终端使用 `node-pty.spawn` 创建 PTY 进程运行 `tmux attach` 或 `screen -r`
+- 外部会话（`tmux-external`、`screen-external`）过滤出主终端列表和持久化存储
+- 关闭外部终端时使用 `execSync` 执行系统命令杀死 tmux/screen 会话

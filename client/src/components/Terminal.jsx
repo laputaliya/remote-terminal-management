@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
-const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false, name }, ref) => {
+const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false, name, isExternal = false }, ref) => {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
@@ -204,7 +204,10 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
             </svg>
           </button>
           <button className="action-btn close-btn" onClick={() => {
-            if (confirm(`确定关闭终端 "${sessionName || sessionId.slice(0, 8)}"？`)) {
+            const confirmMsg = isExternal
+              ? `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}？\n\n注意：这将真正关闭tmux/screen会话，会话内的所有内容将丢失。`
+              : `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}？"`;
+            if (confirm(confirmMsg)) {
               onClose(sessionId);
             }
           }} title="关闭终端">

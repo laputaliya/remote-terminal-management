@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { handleWebSocket } from './websocket-handler.js';
 import { loadSessions, saveSessions } from './sessions.js';
 import { initDefaultUser, login, logout, verifyToken, changePassword, cleanupSessions } from './auth.js';
+import { getExternalTerminals } from './external-processes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -156,12 +157,25 @@ app.delete('/api/sessions/:id', authMiddleware, (req, res) => {
 app.post('/api/auth/change-password', authMiddleware, (req, res) => {
   const { oldPassword, newPassword } = req.body;
   const success = changePassword(req.user.userId, oldPassword, newPassword);
-  
+
   if (!success) {
     return res.status(400).json({ error: 'Invalid old password' });
   }
-  
+
   res.json({ success: true });
+});
+
+// 外部终端列表
+app.get('/api/external-terminals', authMiddleware, (req, res) => {
+  try {
+    // Get current PTY PIDs to exclude from process list
+    const sessions = loadSessions();
+    const externalTerminals = getExternalTerminals([]);
+    res.json(externalTerminals);
+  } catch (error) {
+    console.error('Error getting external terminals:', error);
+    res.status(500).json({ error: 'Failed to get external terminals' });
+  }
 });
 
 // 健康检查

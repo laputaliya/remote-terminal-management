@@ -14,6 +14,10 @@
 - 📝 **输出历史**: 刷新页面后保留终端历史输出
 - 🎛️ **状态持久化**: 布局、侧边栏状态、激活终端列表自动保存
 - ⌨️ **快捷键支持**: 支持快捷键切换终端
+- 🔗 **外部终端管理**: 连接并管理现有的 tmux/screen 会话
+- 🎯 **唯一命名**: 自动为新终端生成唯一名称（Terminal 1、2、3...）
+- ✅ **关闭确认**: 关闭终端前显示确认对话框，防止误操作
+- 📌 **侧边栏图标模式**: 收起时显示图标和状态指示点
 
 ## 技术栈
 
@@ -136,15 +140,21 @@ npm run dev
 ```
 .
 ├── server/
-│   ├── index.js          # 服务器入口
-│   ├── sessions.js       # 会话管理
-│   └── pty-manager.js    # PTY 进程管理
+│   ├── index.js              # 服务器入口
+│   ├── sessions.js           # 会话管理
+│   ├── pty-manager.js        # PTY 进程管理
+│   ├── websocket-handler.js  # WebSocket 消息处理
+│   ├── external-processes.js # 外部终端（tmux/screen）管理
+│   └── auth.js               # 认证管理
 ├── client/
 │   ├── src/
-│   │   ├── App.jsx       # 主应用
+│   │   ├── App.jsx           # 主应用
 │   │   ├── components/
-│   │   │   ├── Terminal.jsx    # 终端组件
-│   │   │   └── Sidebar.jsx     # 侧边栏
+│   │   │   ├── Terminal.jsx        # 终端组件
+│   │   │   ├── MultiTerminal.jsx   # 多终端布局管理
+│   │   │   ├── Sidebar.jsx         # 侧边栏
+│   │   │   ├── ExternalTerminal.jsx # 外部终端管理页面
+│   │   │   └── Login.jsx           # 登录页面
 │   │   └── styles/
 │   │       └── terminal.css
 │   ├── index.html
@@ -161,6 +171,7 @@ npm run dev
 
 #### WebSocket 消息类型
 
+**基础消息类型：**
 - `list` - 获取会话列表
 - `create` - 创建新会话
 - `delete` - 删除会话
@@ -168,6 +179,12 @@ npm run dev
 - `attach` - 附加到会话（接收/发送数据）
 - `input` - 发送输入到终端
 - `resize` - 调整终端大小
+
+**外部终端消息类型：**
+- `list-external` - 获取外部终端列表（tmux/screen 会话）
+- `attach-tmux` - 连接到 tmux 会话
+- `attach-screen` - 连接到 screen 会话
+- `detach-external` - 断开外部终端连接（保留 tmux/screen 会话）
 
 ### REST API
 
@@ -182,6 +199,10 @@ npm run dev
 - `GET /api/sessions` - 获取所有会话列表
 - `POST /api/sessions` - 创建新会话
 - `DELETE /api/sessions/:id` - 删除会话
+
+#### 外部终端接口
+
+- `GET /api/external-terminals` - 获取外部终端列表（tmux/screen/shell 进程）
 
 ## 使用说明
 
@@ -206,13 +227,32 @@ npm run dev
 
 - 点击终端名称切换显示/隐藏
 - 支持收起/展开（状态自动保存）
+- 收起时显示图标模式和状态指示点（蓝色=激活，灰色=未激活）
 - 支持重命名和删除终端
 
 ### 终端操作
 
-- 点击「+」按钮快速创建新终端（自动生成名称）
+- 点击「+」按钮快速创建新终端（自动生成唯一名称）
 - 每个终端可独立调整大小
 - 支持历史输出保留（最多 100,000 字符）
+- 关闭终端前显示确认对话框
+
+### 外部终端管理
+
+点击右上角「外部终端」按钮进入外部终端管理页面：
+
+**功能说明：**
+- 显示系统中现有的 tmux 会话、screen 会话和 shell 进程
+- 点击「连接」按钮可连接到现有的 tmux/screen 会话
+- 点击「返回列表」断开连接但保留 tmux/screen 会话继续运行
+- 点击终端窗口关闭按钮（X）会真正关闭 tmux/screen 会话
+
+**操作区分：**
+
+| 操作 | 效果 |
+|------|------|
+| 返回列表 | 断开连接，tmux/screen 会话继续运行 |
+| 关闭终端（X） | 真正关闭 tmux/screen 会话 |
 
 ### 快捷键
 

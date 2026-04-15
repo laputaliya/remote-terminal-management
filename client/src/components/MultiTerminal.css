@@ -109,6 +109,25 @@
   background: #1177bb;
 }
 
+.external-btn {
+  padding: 6px 12px;
+  background: #3c3c3c;
+  color: #ccc;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.external-btn:hover {
+  background: #4d4d4d;
+  color: #fff;
+}
+
 .terminal-grid {
   flex: 1;
   display: grid;

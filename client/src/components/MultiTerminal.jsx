@@ -13,7 +13,7 @@ const LAYOUTS = [
   { id: '3r', name: 'Left 2 Right 1', icon: '▢', maxTerminals: 3 },
 ];
 
-function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword }) {
+function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal }) {
   // 从 localStorage 读取保存的布局
   const [layout, setLayout] = useState(() => {
     return localStorage.getItem('terminal-layout') || '1';
@@ -121,6 +121,18 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
           <div className="user-info">
             <span className="username">👤 {username}</span>
           </div>
+          <button
+            className="external-btn"
+            onClick={onNavigateToExternal}
+            title="外部终端管理"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            外部终端
+          </button>
           <button
             className="change-password-btn"
             onClick={() => setShowChangePassword(true)}

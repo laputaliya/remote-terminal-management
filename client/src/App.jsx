@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import MultiTerminal from './components/MultiTerminal';
+import ExternalTerminal from './components/ExternalTerminal';
 import Login from './components/Login';
 import './App.css';
 
@@ -10,6 +11,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [username, setUsername] = useState(localStorage.getItem('username'));
+  const [currentPage, setCurrentPage] = useState('main'); // 'main' or 'external'
   const [sessions, setSessions] = useState([]);
   const [activeSessionIds, setActiveSessionIds] = useState(() => {
     const saved = localStorage.getItem('active-session-ids');
@@ -75,14 +77,17 @@ function App() {
           }
           break;
         case 'session-created':
-          setSessions((prev) => [...prev, message.session]);
-          // 自动添加到激活列表
-          setActiveSessionIds((prev) => {
-            const newSet = new Set(prev);
-            newSet.add(message.session.id);
-            saveActiveSessionIds(newSet);
-            return newSet;
-          });
+          // Don't add external sessions (tmux/screen) to main sessions list
+          if (message.session.type !== 'tmux-external' && message.session.type !== 'screen-external') {
+            setSessions((prev) => [...prev, message.session]);
+            // 自动添加到激活列表
+            setActiveSessionIds((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(message.session.id);
+              saveActiveSessionIds(newSet);
+              return newSet;
+            });
+          }
           break;
         case 'session-deleted':
           setSessions((prev) => prev.filter((s) => s.id !== message.sessionId));
@@ -209,10 +214,26 @@ function App() {
     return <Login onLogin={handleLogin} />;
   }
 
+  // Render External Terminal page
+  if (currentPage === 'external') {
+    return (
+      <ExternalTerminal
+        token={token}
+        ws={wsRef.current}
+        onBack={() => setCurrentPage('main')}
+      />
+    );
+  }
+
+  // Filter out external sessions (tmux/screen) for main terminal view
+  const filteredSessions = sessions.filter(s =>
+    s.type !== 'tmux-external' && s.type !== 'screen-external'
+  );
+
   return (
     <div className="app">
       <Sidebar
-        sessions={sessions}
+        sessions={filteredSessions}
         activeSessionIds={activeSessionIds}
         onSelectSession={handleSelectSession}
         onCreateSession={handleCreateSession}
@@ -225,7 +246,7 @@ function App() {
       />
       <main className="main-content">
         <MultiTerminal
-          sessions={sessions}
+          sessions={filteredSessions}
           activeSessionIds={activeSessionIds}
           onSelectSession={handleSelectSession}
           onCreateSession={handleCreateSession}
@@ -235,6 +256,7 @@ function App() {
           username={username}
           onLogout={handleLogout}
           onChangePassword={handleChangePassword}
+          onNavigateToExternal={() => setCurrentPage('external')}
         />
       </main>
     </div>

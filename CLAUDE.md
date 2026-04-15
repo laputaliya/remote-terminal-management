@@ -21,14 +21,17 @@
 │   ├── websocket-handler.js  # WebSocket 连接和消息处理
 │   ├── sessions.js           # 会话持久化管理
 │   ├── pty-manager.js        # PTY (伪终端) 进程管理
+│   ├── external-processes.js # 外部终端管理（tmux/screen）
 │   └── auth.js               # 身份验证和会话管理
 ├── client/
 │   ├── src/
 │   │   ├── App.jsx           # 主应用程序组件
 │   │   ├── components/
-│   │   │   ├── Terminal.jsx  # 独立终端组件 (xterm.js 包装器)
-│   │   │   ├── MultiTerminal.jsx # 多终端网格/布局管理
-│   │   │   └── Sidebar.jsx   # 会话管理侧边栏
+│   │   │   ├── Terminal.jsx        # 独立终端组件 (xterm.js 包装器)
+│   │   │   ├── MultiTerminal.jsx   # 多终端网格/布局管理
+│   │   │   ├── Sidebar.jsx         # 会话管理侧边栏
+│   │   │   ├── ExternalTerminal.jsx # 外部终端管理页面
+│   │   │   └── Login.jsx           # 登录页面
 │   │   └── styles/
 │   ├── index.html
 │   └── vite.config.js
@@ -48,7 +51,9 @@
 - **App.jsx**: 主应用程序，具有 WebSocket 连接管理和身份验证状态
 - **MultiTerminal.jsx**: 管理多个终端布局 (单屏、分割、四分格等)
 - **Terminal.jsx**: 使用 xterm.js 的独立终端组件，具有自动调整大小和输入/输出处理功能
-- **Sidebar.jsx**: 会话管理面板，具有创建/删除/重命名功能
+- **Sidebar.jsx**: 会话管理面板，具有创建/删除/重命名功能，支持图标模式和状态指示点
+- **ExternalTerminal.jsx**: 外部终端管理页面，连接 tmux/screen 会话
+- **Login.jsx**: 认证表单
 
 ## 数据流
 
@@ -67,6 +72,10 @@
 - **键盘快捷键**: Alt+数字键和箭头键用于快速切换终端
 - **身份验证**: 基于令牌的身份验证，支持更改密码
 - **响应式设计**: 在桌面和移动设备上都能正常工作
+- **外部终端管理**: 连接到现有的 tmux/screen 会话
+- **唯一命名**: 自动为新终端生成唯一名称
+- **关闭确认**: 关闭终端前显示确认对话框
+- **侧边栏图标模式**: 收起时显示图标和状态指示点
 
 ## 常见开发任务
 
@@ -93,6 +102,7 @@ npm start
 ```
 
 ### WebSocket 消息类型
+**基础消息：**
 - `list`: 获取会话列表
 - `create`: 创建新终端会话
 - `delete`: 删除终端会话
@@ -101,12 +111,19 @@ npm start
 - `input`: 向终端发送输入
 - `resize`: 调整终端尺寸
 
+**外部终端消息：**
+- `list-external`: 获取外部终端列表（tmux/screen）
+- `attach-tmux`: 连接到 tmux 会话
+- `attach-screen`: 连接到 screen 会话
+- `detach-external`: 断开外部终端连接（保留会话）
+
 ### API 端点
 - `POST /api/auth/login` - 用户身份验证
 - `POST /api/auth/logout` - 用户注销
 - `POST /api/auth/change-password` - 更改密码
 - `GET /api/sessions` - 获取所有会话
 - `DELETE /api/sessions/:id` - 删除特定会话
+- `GET /api/external-terminals` - 获取外部终端列表
 - `GET /api/health` - 健康检查
 
 ## 开发注意事项
@@ -118,3 +135,23 @@ npm start
 - 身份验证令牌在 7 天后过期，存储在客户端 localStorage 中
 - 终端主题使用类似 VS Code 的深色主题，支持标准 ANSI 颜色
 - 所有终端尺寸都使用 xterm.js 的 FitAddon 自动处理
+
+## 外部终端管理
+
+### 功能说明
+外部终端管理功能允许连接到系统中现有的 tmux/screen 会话。
+
+### 会话类型
+- **普通终端**: 由应用创建的 PTY 进程，持久化保存
+- **外部终端**: 连接到现有 tmux/screen 会话，不持久化
+
+### 操作行为
+| 操作 | 普通终端 | 外部终端 |
+|------|---------|---------|
+| 关闭（X） | 终止 PTY | 杀死 tmux/screen 会话 |
+| 返回列表 | N/A | 断开连接，会话继续运行 |
+
+### 技术要点
+- 外部终端使用 `node-pty.spawn` 运行 `tmux attach` 或 `screen -r`
+- 外部会话过滤出主列表和持久化存储
+- 关闭时使用 `execSync` 执行系统命令
