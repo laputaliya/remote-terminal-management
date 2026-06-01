@@ -10,7 +10,7 @@ export default defineConfig({
   root: __dirname,
   server: {
     port: 5173,
-    host: true,
+    host: process.env.VITE_HOST || '127.0.0.1',
     proxy: {
       '/ws': {
         target: 'ws://localhost:3000',

@@ -13,20 +13,16 @@ const LAYOUTS = [
   { id: '3r', name: 'Left 2 Right 1', icon: '▢', maxTerminals: 3 },
 ];
 
-function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal }) {
-  // 从 localStorage 读取保存的布局
-  const [layout, setLayout] = useState(() => {
-    return localStorage.getItem('terminal-layout') || '1';
-  });
+function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const maxTerminals = LAYOUTS.find(l => l.id === layout)?.maxTerminals || 1;
   const isSingleMode = layout === '1';
   const terminalRefs = useRef([]);
 
-  // 保存布局到 localStorage
+  // 保存布局
   const handleLayoutChange = (newLayout) => {
-    setLayout(newLayout);
+    onLayoutChange(newLayout);
     localStorage.setItem('terminal-layout', newLayout);
   };
 
@@ -250,8 +246,8 @@ function ChangePasswordModal({ onClose, onChangePassword }) {
       return;
     }
 
-    if (newPassword.length < 4) {
-      setError('新密码长度至少为 4 位');
+    if (newPassword.length < 8) {
+      setError('新密码长度至少为 8 位');
       return;
     }
 

@@ -2,11 +2,13 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { handleWebSocket } from './websocket-handler.js';
+import { handleWebSocket, sessions as wsSessions } from './websocket-handler.js';
 import { loadSessions, saveSessions } from './sessions.js';
+import { killPty } from './pty-manager.js';
 import { initDefaultUser, login, logout, verifyToken, changePassword, cleanupSessions } from './auth.js';
 import { getExternalTerminals } from './external-processes.js';
 
@@ -17,15 +19,16 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(cors());
-app.use(express.json());
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000' }));
+app.use(express.json({ limit: '100kb' }));
 
 // 初始化默认用户
 initDefaultUser();
 
 // 认证中间件
 function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
+  const token = req.headers.authorization?.replace('Bearer ', '');
   
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -37,26 +40,6 @@ function authMiddleware(req, res, next) {
   }
 
   req.user = user;
-  next();
-}
-
-// WebSocket 认证
-function wsAuthMiddleware(ws, req, next) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const token = url.searchParams.get('token');
-  
-  if (!token) {
-    ws.close(1008, 'Unauthorized');
-    return;
-  }
-
-  const user = verifyToken(token);
-  if (!user) {
-    ws.close(1008, 'Invalid or expired token');
-    return;
-  }
-
-  ws.user = user;
   next();
 }
 
@@ -103,8 +86,30 @@ wss.on('close', () => {
   clearInterval(interval);
 });
 
+// 登录速率限制
+const loginAttempts = new Map();
+const LOGIN_RATE_LIMIT = { windowMs: 60000, maxAttempts: 10 };
+
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now - entry.start > LOGIN_RATE_LIMIT.windowMs) {
+    loginAttempts.set(ip, { start: now, count: 1 });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > LOGIN_RATE_LIMIT.maxAttempts) {
+    return false;
+  }
+  return true;
+}
+
 // 公开路由
 app.post('/api/auth/login', (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  if (!checkLoginRateLimit(ip)) {
+    return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+  }
   const { username, password } = req.body;
   const result = login(username, password);
   
@@ -144,14 +149,22 @@ app.delete('/api/sessions/:id', authMiddleware, (req, res) => {
   const { id } = req.params;
   const sessions = loadSessions();
   const index = sessions.findIndex(s => s.id === id);
-  
-  if (index !== -1) {
-    sessions.splice(index, 1);
-    saveSessions(sessions);
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Session not found' });
+
+  if (index === -1) {
+    return res.status(404).json({ error: 'Session not found' });
   }
+
+  // Also clean up PTY process and in-memory state
+  killPty(id);
+
+  const wsIndex = wsSessions.findIndex(s => s.id === id);
+  if (wsIndex !== -1) {
+    wsSessions.splice(wsIndex, 1);
+  }
+
+  sessions.splice(index, 1);
+  saveSessions(sessions);
+  res.json({ success: true });
 });
 
 app.post('/api/auth/change-password', authMiddleware, (req, res) => {
@@ -222,11 +235,14 @@ server.listen(PORT, HOST, () => {
 });
 
 // 优雅关闭
-process.on('SIGINT', () => {
-  console.log('\nShutting down server...');
+function gracefulShutdown(signal) {
+  console.log(`\nReceived ${signal}, shutting down server...`);
   wss.close();
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
   });
-});
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

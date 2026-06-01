@@ -1,5 +1,6 @@
 import * as pty from 'node-pty';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
 
 const processes = new Map();
 const outputBuffers = new Map();
@@ -9,6 +10,28 @@ let broadcastCallback = null;
 // 设置广播回调
 export function setBroadcastCallback(callback) {
   broadcastCallback = callback;
+}
+
+// 允许的 shell 白名单
+const ALLOWED_SHELLS = new Set([
+  '/bin/bash', '/bin/sh', '/bin/zsh', '/bin/dash', '/bin/fish',
+  '/bin/tcsh', '/bin/csh', '/bin/ksh',
+  '/usr/bin/bash', '/usr/bin/sh', '/usr/bin/zsh', '/usr/bin/dash', '/usr/bin/fish',
+  '/usr/local/bin/bash', '/usr/local/bin/zsh', '/usr/local/bin/fish',
+  '/opt/homebrew/bin/bash', '/opt/homebrew/bin/zsh', '/opt/homebrew/bin/fish'
+]);
+
+function resolveAndValidateShell(shellPath) {
+  try {
+    const realPath = fs.realpathSync(shellPath);
+    if (!ALLOWED_SHELLS.has(realPath)) {
+      throw new Error(`Shell not in allowlist: ${shellPath} -> ${realPath}`);
+    }
+    fs.accessSync(realPath, fs.constants.X_OK);
+    return realPath;
+  } catch (e) {
+    throw new Error(`Invalid or disallowed shell: ${shellPath} (${e.message})`);
+  }
 }
 
 // 获取默认 shell
@@ -21,8 +44,16 @@ function getDefaultShell() {
 
 export function createPty(id, shell = null) {
   const sessionId = id || uuidv4();
-  const shellPath = shell || getDefaultShell();
-  
+  const rawShell = shell || getDefaultShell();
+
+  // 验证 shell 路径是否在白名单中
+  let shellPath;
+  try {
+    shellPath = resolveAndValidateShell(rawShell);
+  } catch (e) {
+    throw new Error(`Shell validation failed: ${e.message}`);
+  }
+
   console.log(`Creating PTY for session ${sessionId} with shell: ${shellPath}`);
 
   try {
@@ -62,6 +93,7 @@ export function createPty(id, shell = null) {
     ptyProcess.onExit(({ exitCode, signal }) => {
       console.log(`Session ${sessionId} exited with code ${exitCode}, signal ${signal}`);
       processes.delete(sessionId);
+      outputBuffers.delete(sessionId);
     });
 
     return sessionId;
@@ -94,11 +126,12 @@ export function killPty(sessionId) {
   if (ptyProcess) {
     try {
       ptyProcess.kill();
-      processes.delete(sessionId);
-      outputBuffers.delete(sessionId);
       console.log(`Killed PTY for session ${sessionId}`);
     } catch (error) {
       console.error(`Failed to kill PTY ${sessionId}:`, error);
+    } finally {
+      processes.delete(sessionId);
+      outputBuffers.delete(sessionId);
     }
   }
 }

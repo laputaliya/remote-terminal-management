@@ -95,6 +95,7 @@ export function initDefaultUser() {
       username: 'admin',
       salt,
       hash,
+      passwordChangeRequired: true,
       createdAt: new Date().toISOString()
     });
     saveUsers(users);
@@ -127,7 +128,7 @@ export function login(username, password) {
   sessions.push(session);
   saveAuthSessions(sessions);
 
-  return { token, username: user.username };
+  return { token, username: user.username, passwordChangeRequired: user.passwordChangeRequired || false };
 }
 
 // 验证 token
@@ -170,6 +171,7 @@ export function changePassword(userId, oldPassword, newPassword) {
   const { salt, hash } = hashPassword(newPassword);
   user.salt = salt;
   user.hash = hash;
+  delete user.passwordChangeRequired;
   saveUsers(users);
   return true;
 }

@@ -27,7 +27,9 @@ export function loadSessions() {
 
 export function saveSessions(sessions) {
   try {
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf-8');
+    const tmpFile = SESSIONS_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(sessions, null, 2), 'utf-8');
+    fs.renameSync(tmpFile, SESSIONS_FILE);
   } catch (error) {
     console.error('Error saving sessions:', error);
   }

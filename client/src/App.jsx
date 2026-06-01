@@ -21,6 +21,9 @@ function App() {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
   const [wsStatus, setWsStatus] = useState('disconnected');
+  const [terminalLayout, setTerminalLayout] = useState(() => {
+    return localStorage.getItem('terminal-layout') || '1';
+  });
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -107,6 +110,7 @@ function App() {
     };
 
     ws.onclose = () => {
+      if (!wsRef.current) return; // cleanup already ran, don't reconnect
       console.log('WebSocket disconnected');
       setWsStatus('disconnected');
       reconnectTimeoutRef.current = setTimeout(connect, 2000);
@@ -115,7 +119,7 @@ function App() {
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-  }, [token, activeSessionIds.size]);
+  }, [token]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -125,7 +129,9 @@ function App() {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
     };
   }, [isAuthenticated, connect]);
 
@@ -242,7 +248,7 @@ function App() {
         onRefresh={handleRefresh}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
-        isSingleMode={localStorage.getItem('terminal-layout') === '1' || !localStorage.getItem('terminal-layout')}
+        isSingleMode={terminalLayout === '1'}
       />
       <main className="main-content">
         <MultiTerminal
@@ -257,6 +263,8 @@ function App() {
           onLogout={handleLogout}
           onChangePassword={handleChangePassword}
           onNavigateToExternal={() => setCurrentPage('external')}
+          layout={terminalLayout}
+          onLayoutChange={setTerminalLayout}
         />
       </main>
     </div>

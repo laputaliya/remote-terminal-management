@@ -139,17 +139,53 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(terminalRef.current);
 
+    // 页面可见性变化时刷新终端渲染（解决切屏后出现残影/闪烁问题）
+    const refreshTerminal = () => {
+      if (!fitAddonRef.current) return;
+      requestAnimationFrame(() => {
+        try {
+          fitAddonRef.current.fit();
+          terminal.refresh(0, terminal.rows - 1);
+        } catch (e) {
+          // ignore refresh errors during dispose
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshTerminal();
+      }
+    };
+    window.addEventListener('focus', refreshTerminal);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 输出后延迟刷新终端，修复 tmux 多客户端连接时的渲染残留
+    let refreshDebounce = null;
+    const scheduleRefresh = () => {
+      if (refreshDebounce) clearTimeout(refreshDebounce);
+      refreshDebounce = setTimeout(() => {
+        if (fitAddonRef.current && document.visibilityState === 'visible') {
+          requestAnimationFrame(() => {
+            try { terminal.refresh(0, terminal.rows - 1); } catch (e) {}
+          });
+        }
+      }, 150);
+    };
+
     const handleMessage = (event) => {
       const message = JSON.parse(event.data);
 
       if (message.type === 'output' && message.sessionId === sessionId) {
         terminal.write(message.data);
+        scheduleRefresh();
       } else if (message.type === 'session-attached' && message.sessionId === sessionId) {
         // Write history output first, then mark as attached
         if (message.history) {
           terminal.write(message.history);
         }
         isAttachedRef.current = true; // Now allow input forwarding
+        scheduleRefresh();
       } else if (message.type === 'session-updated') {
         if (message.session.id === sessionId) {
           setSessionName(message.session.name);
@@ -169,6 +205,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       ws.removeEventListener('close', handleClose);
       ws.removeEventListener('open', handleOpen);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('focus', refreshTerminal);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (refreshDebounce) clearTimeout(refreshDebounce);
       resizeObserver.disconnect();
       terminal.dispose();
     };

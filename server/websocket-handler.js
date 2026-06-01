@@ -1,7 +1,7 @@
 import { loadSessions, saveSessions } from './sessions.js';
 import { createPty, writeToPty, resizePty, killPty, setBroadcastCallback, getOutputHistory } from './pty-manager.js';
 import { getExternalTerminals, attachTmuxSession, attachScreenSession } from './external-processes.js';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 
 // 加载已保存的会话，过滤掉外部session（无法恢复）
@@ -52,12 +52,11 @@ for (const session of sessions) {
 export function handleWebSocket(ws, websocketServer, user) {
   wss = websocketServer;
   let currentSessionIds = new Set();
-  let isAlive = true;
 
   ws.isAlive = true;
-  
+
   ws.on('pong', () => {
-    isAlive = true;
+    ws.isAlive = true;
   });
 
   ws.on('message', (data) => {
@@ -102,7 +101,7 @@ export function handleWebSocket(ws, websocketServer, user) {
       }
     } catch (error) {
       console.error('WebSocket message error:', error);
-      ws.send(JSON.stringify({ type: 'error', message: error.message }));
+      ws.send(JSON.stringify({ type: 'error', message: 'An internal error occurred' }));
     }
   });
 
@@ -122,6 +121,16 @@ export function handleWebSocket(ws, websocketServer, user) {
 
 function handleCreateSession(ws, message) {
   const { name, shell } = message;
+
+  if (name && (typeof name !== 'string' || name.length > 100)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Session name must be 100 characters or fewer' }));
+    return;
+  }
+  if (shell && (typeof shell !== 'string' || shell.length > 500)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Shell path must be 500 characters or fewer' }));
+    return;
+  }
+
   const sessionId = createPty(null, shell);
 
   // Generate unique terminal name
@@ -287,14 +296,14 @@ function handleDeleteSession(ws, message) {
       if (session.type === 'tmux-external' && session.tmuxSession) {
         try {
           console.log(`Killing tmux session: ${session.tmuxSession}`);
-          execSync(`tmux kill-session -t ${session.tmuxSession}`, { timeout: 5000 });
+          spawnSync('tmux', ['kill-session', '-t', session.tmuxSession], { timeout: 5000 });
         } catch (e) {
           console.error(`Failed to kill tmux session ${session.tmuxSession}:`, e.message);
         }
       } else if (session.type === 'screen-external' && session.screenSession) {
         try {
           console.log(`Killing screen session: ${session.screenSession}`);
-          execSync(`screen -S ${session.screenSession} -X quit`, { timeout: 5000 });
+          spawnSync('screen', ['-S', session.screenSession, '-X', 'quit'], { timeout: 5000 });
         } catch (e) {
           console.error(`Failed to kill screen session ${session.screenSession}:`, e.message);
         }
@@ -339,6 +348,12 @@ function handleDeleteSession(ws, message) {
 
 function handleRenameSession(ws, message) {
   const { sessionId, name } = message;
+
+  if (!name || typeof name !== 'string' || name.length > 100) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Session name must be 1-100 characters' }));
+    return;
+  }
+
   const session = sessions.find(s => s.id === sessionId);
 
   if (session) {
@@ -374,9 +389,10 @@ function handleListExternalTerminals(ws) {
       data: externalTerminals
     }));
   } catch (error) {
+    console.error('Failed to list external terminals:', error);
     ws.send(JSON.stringify({
       type: 'error',
-      message: 'Failed to get external terminals: ' + error.message
+      message: 'Failed to get external terminals'
     }));
   }
 }
@@ -443,7 +459,7 @@ function handleAttachTmux(ws, message, currentSessionIds) {
     console.error('Failed to attach tmux session:', error);
     ws.send(JSON.stringify({
       type: 'error',
-      message: `Failed to attach to tmux session: ${error.message}`
+      message: 'Failed to attach to tmux session'
     }));
   }
 }
@@ -510,7 +526,7 @@ function handleAttachScreen(ws, message, currentSessionIds) {
     console.error('Failed to attach screen session:', error);
     ws.send(JSON.stringify({
       type: 'error',
-      message: `Failed to attach to screen session: ${error.message}`
+      message: 'Failed to attach to screen session'
     }));
   }
 }

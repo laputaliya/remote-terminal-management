@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, spawnSync } from 'child_process';
 import * as pty from 'node-pty';
 
 /**
@@ -81,43 +81,55 @@ export function getShellProcesses(currentPtyPids = []) {
   try {
     const username = process.env.USER || process.env.LOGNAME;
     if (!username) return [];
-    
-    // Find shell processes owned by current user
-    const output = execSync(
-      `ps -u ${username} -o pid,ppid,comm,cmd --no-headers 2>/dev/null | grep -E 'bash|zsh|sh|fish|dash|$SHELL' || echo ""`,
-      { encoding: 'utf-8', timeout: 5000 }
-    );
-    
-    if (!output.trim()) return [];
-    
+
+    // Use spawnSync with array args to avoid shell injection
+    const result = spawnSync('ps', ['-u', username, '-o', 'pid,ppid,comm,cmd', '--no-headers'], {
+      encoding: 'utf-8',
+      timeout: 5000
+    });
+
+    if (result.error || !result.stdout || !result.stdout.trim()) return [];
+
+    // Filter shell processes in JavaScript, not via shell grep
+    const userShell = process.env.SHELL ? process.env.SHELL.split('/').pop() : '';
+    const shellNames = ['bash', 'zsh', 'dash', 'fish', 'sh'];
+    if (userShell && !shellNames.includes(userShell)) {
+      shellNames.push(userShell);
+    }
+    const shellPattern = new RegExp(`^(${shellNames.join('|')})$`);
+
     const processes = [];
-    const lines = output.trim().split('\n');
-    
+    const lines = result.stdout.trim().split('\n');
+
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 3) {
         const pid = parseInt(parts[0], 10);
         const ppid = parseInt(parts[1], 10);
         const comm = parts[2];
+
+        // Only include shell processes
+        if (!shellPattern.test(comm)) continue;
+
         const cmd = parts.slice(3).join(' ') || comm;
-        
+
         // Skip processes that are PTY processes of this app
         if (currentPtyPids.includes(pid)) continue;
-        
+
         // Skip very short-lived or child processes
         if (ppid === 1) continue;
-        
+
         processes.push({
           type: 'process',
           pid,
           ppid,
           name: comm,
-          cmd: cmd.substring(0, 100), // Truncate long commands
+          cmd: cmd.substring(0, 100),
           status: 'running'
         });
       }
     }
-    
+
     return processes;
   } catch (error) {
     return [];
@@ -144,7 +156,7 @@ export function getExternalTerminals(currentPtyPids = []) {
  * Attach to a tmux session - returns a PTY process
  */
 export function attachTmuxSession(sessionName, cols = 80, rows = 24) {
-  const ptyProcess = pty.spawn('tmux', ['attach', '-t', sessionName], {
+  const ptyProcess = pty.spawn('tmux', ['attach', '-d', '-t', sessionName], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,

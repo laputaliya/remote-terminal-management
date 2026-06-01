@@ -1,157 +1,69 @@
 # CLAUDE.md
 
-此文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
+此文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供开发规则和约束。
 
-## 概述
+项目概述、功能特性、架构细节、API 文档等请参阅 [README.md](./README.md)。
 
-远程终端管理器是一个基于网页的终端应用程序，允许用户通过浏览器界面管理多个持久化终端会话。该应用程序支持同时管理多个终端，在浏览器会话之间保持会话持久性，并提供各种布局选项以查看多个终端。
+## 代码风格
 
-## 架构
+- **ESM 模块**: 所有文件使用 `import`/`export` 语法
+- **无类组件**: React 组件一律使用函数组件 + Hooks
+- **CSS 分离**: 每个组件独立 CSS 文件，不使用 CSS-in-JS
+- **不写注释**: 除非解释非显而易见的 WHY（隐藏约束、微妙的不变量、特定 bug 的变通方案）。不要解释 WHAT——命名已经说明了
 
-### 技术栈
-- **后端**: Node.js, Express.js, WebSocket (ws), node-pty
-- **前端**: React 18+, xterm.js (终端仿真), WebSocket
-- **构建工具**: Vite, npm
+## 开发模式
 
-### 目录结构
-```
-.
-├── server/
-│   ├── index.js              # 主服务器入口点
-│   ├── websocket-handler.js  # WebSocket 连接和消息处理
-│   ├── sessions.js           # 会话持久化管理
-│   ├── pty-manager.js        # PTY (伪终端) 进程管理
-│   ├── external-processes.js # 外部终端管理（tmux/screen）
-│   └── auth.js               # 身份验证和会话管理
-├── client/
-│   ├── src/
-│   │   ├── App.jsx           # 主应用程序组件
-│   │   ├── components/
-│   │   │   ├── Terminal.jsx        # 独立终端组件 (xterm.js 包装器)
-│   │   │   ├── MultiTerminal.jsx   # 多终端网格/布局管理
-│   │   │   ├── Sidebar.jsx         # 会话管理侧边栏
-│   │   │   ├── ExternalTerminal.jsx # 外部终端管理页面
-│   │   │   └── Login.jsx           # 登录页面
-│   │   └── styles/
-│   ├── index.html
-│   └── vite.config.js
-└── package.json
-```
+### 前端
+- 状态管理：`useState`，跨组件状态通过 props 传递
+- WebSocket 引用存储在 `useRef` 中
+- 持久化状态（布局、侧边栏、激活终端）通过 `localStorage`，初始化时用 lazy initializer 读取
+- `isSingleMode` 等跨组件状态应从 App 层传入，不要在子组件中直接读 localStorage render 时值
 
-### 核心组件
+### 后端
+- Express 中间件处理认证
+- PTY 进程存储在 `Map`（内存）中，不在进程间共享
+- 会话元数据持久化到 `.data/` JSON 文件
+- WebSocket 通过 URL 查询参数 `?token=` 认证
+- REST API 仅通过 `Authorization: Bearer <token>` 头认证
 
-#### 后端架构
-- **Express 服务器**: 处理 REST API 端点并提供静态文件服务
-- **WebSocket 服务器**: 使用 ws 库进行终端 I/O 的实时通信
-- **身份验证层**: 基于令牌的身份验证，带有加密密码 (PBKDF2)
-- **PTY 管理**: 使用 node-pty 创建和管理伪终端进程
-- **会话持久化**: 将终端会话保存到磁盘并在重启时恢复
+### 错误处理
+- 客户端 WebSocket 消息只返回通用错误消息，不暴露 `error.message`（内部堆栈/路径）
+- 详细错误通过 `console.error` 输出到服务端日志
+- `try/catch` 中的清理逻辑放在 `finally` 块
 
-#### 前端架构
-- **App.jsx**: 主应用程序，具有 WebSocket 连接管理和身份验证状态
-- **MultiTerminal.jsx**: 管理多个终端布局 (单屏、分割、四分格等)
-- **Terminal.jsx**: 使用 xterm.js 的独立终端组件，具有自动调整大小和输入/输出处理功能
-- **Sidebar.jsx**: 会话管理面板，具有创建/删除/重命名功能，支持图标模式和状态指示点
-- **ExternalTerminal.jsx**: 外部终端管理页面，连接 tmux/screen 会话
-- **Login.jsx**: 认证表单
+## 安全规则（必须遵守）
 
-## 数据流
+修改以下模块时，必须遵守对应的安全约束：
 
-1. **身份验证流程**: 客户端登录 → 接收令牌 → 令牌存储在 localStorage 中 → 后续请求包含 Authorization 头
-2. **终端创建流程**: WebSocket `create` 消息 → PTY 进程创建 → 会话持久化到磁盘 → 向客户端发送通知
-3. **终端 I/O 流程**: xterm.js 发送输入 → WebSocket `input` 消息 → PTY 进程写入 → PTY 输出 → WebSocket 广播 → xterm.js 显示
-4. **会话持久化**: 会话保存到 `.data/sessions.json`，用户数据保存到 `.data/users.json`，身份验证会话保存到 `.data/auth-sessions.json`
+| 模块 | 规则 |
+|------|------|
+| `pty-manager.js` | 新 Shell 路径必须添加到 `ALLOWED_SHELLS` 白名单；创建 PTY 前必须经 `resolveAndValidateShell()` 验证真实路径 |
+| `external-processes.js` | 外部命令调用必须使用 `spawnSync`/`spawn` 数组参数形式，禁止 `execSync` 字符串拼接 |
+| `websocket-handler.js` | 用户输入的 `name`（≤100 字符）、`shell`（≤500 字符）必须校验类型和长度；tmux/screen 会话名传入 `spawnSync` 时作为数组元素，不拼接字符串 |
+| `auth.js` | 密码最小长度 8 位；PBKDF2 参数（100,000 迭代、SHA-256、16 字节 salt）不可降低；Token 64 字节随机 hex 不可缩短 |
+| `index.js` | 登录接口速率限制不可移除；`express.json()` 的 `limit` 不可移除；Helmet 中间件不可移除（CSP 可单独配置）；CORS 不可回退到 `*` |
 
-## 主要特性
+## 常见陷阱
 
-- **多终端管理**: 支持多个同时运行的终端会话
-- **会话持久化**: 关闭浏览器后终端继续运行
-- **自动重连**: 页面刷新后自动重新连接到现有会话
-- **多种布局**: 8 种不同的终端网格布局 (单屏、分割、四分格等)
-- **终端历史记录**: 跨会话保留输出历史 (最多 100,000 个字符)
-- **键盘快捷键**: Alt+数字键和箭头键用于快速切换终端
-- **身份验证**: 基于令牌的身份验证，支持更改密码
-- **响应式设计**: 在桌面和移动设备上都能正常工作
-- **外部终端管理**: 连接到现有的 tmux/screen 会话
-- **唯一命名**: 自动为新终端生成唯一名称
-- **关闭确认**: 关闭终端前显示确认对话框
-- **侧边栏图标模式**: 收起时显示图标和状态指示点
+- WebSocket 心跳依赖 `ws.isAlive` 属性（不是局部变量），修改心跳逻辑时确保 `pong` 回调更新的是 `ws.isAlive`
+- `ws.on('message', ...)` 会**替换**已有的 message 监听器，不要在消息处理器内部再次调用 `ws.on('message', ...)`
+- `handleWebSocket()` 内部赋值全局 `wss` 变量（来自 `websocket-handler.js`），不要移除或修改这个赋值
+- 外部 session (`tmux-external`/`screen-external`) 不应持久化，保存前必须过滤
+- `sessions.json` 使用原子写入（`.tmp` + `rename`），修改 `saveSessions()` 时不要破坏这个机制
+- PTY `onExit` 回调中需要同时清理 `processes` 和 `outputBuffers` 两个 Map
+- 前端 `connect` 的 `useCallback` 依赖数组不应包含 `activeSessionIds.size`（会导致每次选会话都重连 WebSocket）
+- `wsRef.current = null` 必须在 cleanup 中 `ws.close()` 之前设置，防止 `onclose` 回调误触发重连
 
-## 常见开发任务
+## 文件职责速查
 
-### 启动开发
-```bash
-# 安装依赖
-npm run install:all
-
-# 在开发模式下启动服务器和客户端
-npm run dev
-
-# 或者分别启动：
-npm run server  # 启动后端服务器
-cd client && npm run dev  # 启动前端开发服务器
-```
-
-### 构建生产版本
-```bash
-# 构建前端
-cd client && npm run build
-
-# 启动生产服务器
-npm start
-```
-
-### WebSocket 消息类型
-**基础消息：**
-- `list`: 获取会话列表
-- `create`: 创建新终端会话
-- `delete`: 删除终端会话
-- `rename`: 重命名会话
-- `attach`: 附加到会话并接收输出
-- `input`: 向终端发送输入
-- `resize`: 调整终端尺寸
-
-**外部终端消息：**
-- `list-external`: 获取外部终端列表（tmux/screen）
-- `attach-tmux`: 连接到 tmux 会话
-- `attach-screen`: 连接到 screen 会话
-- `detach-external`: 断开外部终端连接（保留会话）
-
-### API 端点
-- `POST /api/auth/login` - 用户身份验证
-- `POST /api/auth/logout` - 用户注销
-- `POST /api/auth/change-password` - 更改密码
-- `GET /api/sessions` - 获取所有会话
-- `DELETE /api/sessions/:id` - 删除特定会话
-- `GET /api/external-terminals` - 获取外部终端列表
-- `GET /api/health` - 健康检查
-
-## 开发注意事项
-
-- 应用程序将在 `.data/` 目录中存储用户数据和会话
-- 终端输出会在内存中保留，并在客户端重新连接时恢复
-- 前端会使用指数退避策略自动重新连接到 WebSocket
-- PTY 进程与 WebSocket 连接独立管理
-- 身份验证令牌在 7 天后过期，存储在客户端 localStorage 中
-- 终端主题使用类似 VS Code 的深色主题，支持标准 ANSI 颜色
-- 所有终端尺寸都使用 xterm.js 的 FitAddon 自动处理
-
-## 外部终端管理
-
-### 功能说明
-外部终端管理功能允许连接到系统中现有的 tmux/screen 会话。
-
-### 会话类型
-- **普通终端**: 由应用创建的 PTY 进程，持久化保存
-- **外部终端**: 连接到现有 tmux/screen 会话，不持久化
-
-### 操作行为
-| 操作 | 普通终端 | 外部终端 |
-|------|---------|---------|
-| 关闭（X） | 终止 PTY | 杀死 tmux/screen 会话 |
-| 返回列表 | N/A | 断开连接，会话继续运行 |
-
-### 技术要点
-- 外部终端使用 `node-pty.spawn` 运行 `tmux attach` 或 `screen -r`
-- 外部会话过滤出主列表和持久化存储
-- 关闭时使用 `execSync` 执行系统命令
+| 文件 | 职责 | 关键导出 |
+|------|------|---------|
+| `server/index.js` | Express 启动、中间件、路由、WebSocket 认证入口 | — |
+| `server/auth.js` | 用户 CRUD、密码哈希、Token 签发/验证/清理 | `initDefaultUser`, `login`, `logout`, `verifyToken`, `changePassword` |
+| `server/pty-manager.js` | PTY 进程生命周期、输出缓冲、Shell 白名单 | `createPty`, `writeToPty`, `resizePty`, `killPty`, `getOutputHistory` |
+| `server/websocket-handler.js` | WebSocket 消息路由、会话 CRUD、外部终端连接 | `handleWebSocket`, `sessions` |
+| `server/sessions.js` | 会话 JSON 文件读写（原子写入） | `loadSessions`, `saveSessions` |
+| `server/external-processes.js` | tmux/screen/shell 进程检测、连接 | `getExternalTerminals`, `attachTmuxSession`, `attachScreenSession` |
+| `client/src/App.jsx` | WebSocket 连接管理、认证状态、布局状态 | — |
+| `client/src/components/Terminal.jsx` | xterm.js 终端渲染、自适应、输入/输出处理 | — |
+| `client/src/components/MultiTerminal.jsx` | 多终端布局管理、快捷键、改密弹窗 | — |

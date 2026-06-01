@@ -90,12 +90,12 @@
 
 .terminal-body {
   flex: 1;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
 }
 
 .terminal-body.compact {
-  padding: 4px;
+  padding: 0;
   height: 100%;
 }
 
