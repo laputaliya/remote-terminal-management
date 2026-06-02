@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Terminal from './Terminal';
+import { ConfirmModal, PromptModal } from './Modal';
 import './MultiTerminal.css';
 
 const LAYOUTS = [
@@ -16,6 +17,8 @@ const LAYOUTS = [
 function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [closeTarget, setCloseTarget] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
   const maxTerminals = LAYOUTS.find(l => l.id === layout)?.maxTerminals || 1;
   const isSingleMode = layout === '1';
   const terminalRefs = useRef([]);
@@ -88,9 +91,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
 
 
   const handleCloseCell = (sessionId, sessionName) => {
-    if (confirm(`确定关闭终端 "${sessionName}"？`)) {
-      onDeleteSession(sessionId);
-    }
+    setCloseTarget({ sessionId, sessionName });
   };
 
   const activeList = getActiveSessionsList();
@@ -190,7 +191,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
                 <div className="cell-actions">
                   <button
                     className="cell-btn"
-                    onClick={() => onRenameSession(sessionId, prompt('新名称:', session.name))}
+                    onClick={() => setRenameTarget({ sessionId, name: session.name })}
                     title="重命名"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -226,6 +227,22 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
           );
         })}
       </div>
+
+      {closeTarget && (
+        <ConfirmModal
+          message={`确定关闭终端 "${closeTarget.sessionName}"？`}
+          onConfirm={() => { onDeleteSession(closeTarget.sessionId); setCloseTarget(null); }}
+          onCancel={() => setCloseTarget(null)}
+        />
+      )}
+      {renameTarget && (
+        <PromptModal
+          title="新名称"
+          defaultValue={renameTarget.name}
+          onConfirm={(newName) => { onRenameSession(renameTarget.sessionId, newName); setRenameTarget(null); }}
+          onCancel={() => setRenameTarget(null)}
+        />
+      )}
     </div>
   );
 }

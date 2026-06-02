@@ -168,6 +168,7 @@ export function attachTmuxSession(sessionName, cols = 80, rows = 24) {
       TMUX: '' // Clear TMUX env to allow attach from within tmux
     }
   });
+
   return ptyProcess;
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } f
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { ConfirmModal, PromptModal } from './Modal';
 import './Terminal.css';
 
 const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact = false, name, isExternal = false }, ref) => {
@@ -10,7 +11,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
   const fitAddonRef = useRef(null);
   const [isConnected, setIsConnected] = useState(true);
   const [sessionName, setSessionName] = useState(name || `Terminal ${sessionId.slice(0, 8)}`);
-  const isAttachedRef = useRef(false); // Track if session-attached received
+  const isAttachedRef = useRef(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
 
   // 暴露 focus 方法给父组件
   useImperativeHandle(ref, () => ({
@@ -63,35 +66,39 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     terminal.open(terminalRef.current);
     fitAddon.fit();
 
+    // 右键粘贴：无选中文本时粘贴剪贴板内容
+    terminal.element.addEventListener('contextmenu', (e) => {
+      const selection = terminal.getSelection();
+      if (!selection) {
+        e.preventDefault();
+        navigator.clipboard.readText().then(text => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', sessionId, data: text }));
+          }
+        }).catch(() => {});
+      }
+    });
+
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
     // 等待 WebSocket 连接就绪后再发送消息
-    const sendAttachAndResize = () => {
+    const sendAttach = () => {
       if (ws.readyState === WebSocket.OPEN) {
-        // 延迟一点发送，确保 PTY 已创建
         setTimeout(() => {
-          // 先发送 resize，让 PTY 创建时就使用正确的大小
-          ws.send(JSON.stringify({
-            type: 'resize',
-            sessionId,
-            cols: terminal.cols,
-            rows: terminal.rows
-          }));
-
-          // 再发送 attach 消息来接收历史输出
+          // 先发送 attach 获取历史输出，resize 由 ResizeObserver 触发
+          // 避免 resize 先于 attach 导致 shell 输出重复提示符
           ws.send(JSON.stringify({
             type: 'attach',
             sessionId
           }));
         }, 100);
       } else {
-        // 如果还没连接，等待连接后再发送
-        ws.addEventListener('open', sendAttachAndResize, { once: true });
+        ws.addEventListener('open', sendAttach, { once: true });
       }
     };
 
-    sendAttachAndResize();
+    sendAttach();
 
     terminal.onData((data) => {
       // Only forward input after receiving session-attached
@@ -106,8 +113,17 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       }
     });
 
-    // 处理特殊按键，让 Alt+数字/方向键事件冒泡到父组件用于切换终端
+    // 处理特殊按键和剪贴板快捷键
     terminal.attachCustomKeyEventHandler((e) => {
+      // Ctrl+Shift+C: 复制选中文本（xterm 不支持，需手动处理）
+      if (e.type === 'keydown' && !e.repeat && e.ctrlKey && e.shiftKey && e.key === 'C') {
+        const selection = terminal.getSelection();
+        if (selection) {
+          navigator.clipboard.writeText(selection).catch(() => {});
+        }
+        return false;
+      }
+      // Ctrl+Shift+V: xterm 原生支持粘贴，不拦截让其正常处理
       // Alt + 数字键 或 Alt + 方向键 不阻止默认行为，让父组件处理
       if (e.altKey && (
         (e.key >= '0' && e.key <= '9') ||
@@ -116,9 +132,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         e.key === 'ArrowUp' ||
         e.key === 'ArrowDown'
       )) {
-        return false; // 返回 false 让事件继续传播
+        return false;
       }
-      return true; // 其他按键正常处理
+      return true;
     });
 
     const handleResize = () => {
@@ -173,18 +189,32 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       }, 150);
     };
 
+    // Buffer output received before session-attached to avoid duplicate prompt on refresh
+    let preAttachBuffer = '';
+    let attached = false;
+
     const handleMessage = (event) => {
       const message = JSON.parse(event.data);
 
       if (message.type === 'output' && message.sessionId === sessionId) {
-        terminal.write(message.data);
+        if (!attached) {
+          preAttachBuffer += message.data;
+        } else {
+          terminal.write(message.data);
+        }
         scheduleRefresh();
       } else if (message.type === 'session-attached' && message.sessionId === sessionId) {
-        // Write history output first, then mark as attached
+        // Write history first, then flush buffered output
         if (message.history) {
           terminal.write(message.history);
         }
-        isAttachedRef.current = true; // Now allow input forwarding
+        attached = true;
+        isAttachedRef.current = true;
+        // Flush any output that arrived after the history was captured
+        if (preAttachBuffer) {
+          terminal.write(preAttachBuffer);
+          preAttachBuffer = '';
+        }
         scheduleRefresh();
       } else if (message.type === 'session-updated') {
         if (message.session.id === sessionId) {
@@ -213,12 +243,10 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     };
   }, [sessionId, ws]);
 
-  const handleRename = () => {
-    const newName = prompt('输入新名称:', sessionName);
-    if (newName && newName.trim()) {
-      onRename(sessionId, newName.trim());
-      setSessionName(newName.trim());
-    }
+  const handleRename = (newName) => {
+    onRename(sessionId, newName);
+    setSessionName(newName);
+    setShowRenameModal(false);
   };
 
   if (compact) {
@@ -236,20 +264,13 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
           <span className="session-shell">{shell}</span>
         </div>
         <div className="terminal-actions">
-          <button className="action-btn" onClick={handleRename} title="重命名">
+          <button className="action-btn" onClick={() => setShowRenameModal(true)} title="重命名">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
-          <button className="action-btn close-btn" onClick={() => {
-            const confirmMsg = isExternal
-              ? `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}？\n\n注意：这将真正关闭tmux/screen会话，会话内的所有内容将丢失。`
-              : `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}？"`;
-            if (confirm(confirmMsg)) {
-              onClose(sessionId);
-            }
-          }} title="关闭终端">
+          <button className="action-btn close-btn" onClick={() => setShowCloseModal(true)} title="关闭终端">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -258,6 +279,25 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         </div>
       </div>
       <div className="terminal-body" ref={terminalRef}></div>
+
+      {showRenameModal && (
+        <PromptModal
+          title="输入新名称"
+          defaultValue={sessionName}
+          onConfirm={handleRename}
+          onCancel={() => setShowRenameModal(false)}
+        />
+      )}
+      {showCloseModal && (
+        <ConfirmModal
+          message={isExternal
+            ? `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}"？\n\n注意：这将真正关闭tmux/screen会话，会话内的所有内容将丢失。`
+            : `确定关闭终端 "${sessionName || sessionId.slice(0, 8)}"？`
+          }
+          onConfirm={() => { setShowCloseModal(false); onClose(sessionId); }}
+          onCancel={() => setShowCloseModal(false)}
+        />
+      )}
     </div>
   );
 });

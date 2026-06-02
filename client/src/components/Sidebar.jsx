@@ -1,10 +1,27 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ConfirmModal, PromptModal } from './Modal';
 import './Sidebar.css';
 
 function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, onRefresh, isCollapsed, onToggleCollapse, isSingleMode }) {
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   const handleCreate = () => {
-    // 自动生成名称，不需要输入
     onCreateSession(null, null);
+  };
+
+  const handleRenameConfirm = (newName) => {
+    if (renameTarget) {
+      onRenameSession?.(renameTarget.id, newName);
+    }
+    setRenameTarget(null);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteTarget) {
+      onDeleteSession(deleteTarget.id);
+    }
+    setDeleteTarget(null);
   };
 
   return (
@@ -37,7 +54,6 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
         </div>
       </div>
 
-      {/* Expanded session list */}
       {!isCollapsed && (
         <div className="session-list">
           {sessions.length === 0 ? (
@@ -67,10 +83,7 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
                     className="session-action-btn rename"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const newName = prompt('输入新名称:', session.name);
-                      if (newName && newName.trim()) {
-                        onRenameSession?.(session.id, newName.trim());
-                      }
+                      setRenameTarget(session);
                     }}
                     title="重命名"
                   >
@@ -83,9 +96,7 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
                     className="session-action-btn delete"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`确定删除终端 "${session.name}"？`)) {
-                        onDeleteSession(session.id);
-                      }
+                      setDeleteTarget(session);
                     }}
                     title="删除"
                   >
@@ -101,7 +112,6 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
         </div>
       )}
 
-      {/* Collapsed session list - icon only */}
       {isCollapsed && (
         <div className="session-list collapsed">
           {sessions.map((session) => (
@@ -117,7 +127,6 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
         </div>
       )}
 
-      {/* Expanded footer */}
       {!isCollapsed && (
         <div className="sidebar-footer">
           <button className="create-btn" onClick={handleCreate}>
@@ -130,7 +139,6 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
         </div>
       )}
 
-      {/* Collapsed footer - icon only */}
       {isCollapsed && (
         <div className="sidebar-footer collapsed">
           <button className="create-btn-icon" onClick={handleCreate} title="新建终端">
@@ -140,6 +148,22 @@ function Sidebar({ sessions, activeSessionIds, onSelectSession, onCreateSession,
             </svg>
           </button>
         </div>
+      )}
+
+      {renameTarget && (
+        <PromptModal
+          title="输入新名称"
+          defaultValue={renameTarget.name}
+          onConfirm={handleRenameConfirm}
+          onCancel={() => setRenameTarget(null)}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          message={`确定删除终端 "${deleteTarget.name}"？`}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );
