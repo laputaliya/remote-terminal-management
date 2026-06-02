@@ -111,9 +111,19 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     sendAttach();
 
     terminal.onData((data) => {
-      // Only forward input after receiving session-attached
-      // This prevents xterm init sequences (like DA query) from being sent to PTY
       if (!isAttachedRef.current) return;
+      // Filter out xterm.js internal protocol responses to prevent garbage
+      // when multiple clients share the same PTY
+      if (data.startsWith('\x1b[')) {
+        // DA/DSR responses: CSI ?...c, CSI >...c, CSI ...n
+        const csiResponse = /^\x1b\[(\?|>)?[0-9;]*[cn]$/;
+        if (csiResponse.test(data)) return;
+      }
+      if (data.startsWith('\x1b]')) {
+        // OSC responses: OSC ... BEL or OSC ... ST
+        const oscResponse = /^\x1b\][^\x07\x1b]*(\x07|\x1b\\)$/;
+        if (oscResponse.test(data)) return;
+      }
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'input',

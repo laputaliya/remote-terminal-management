@@ -4,7 +4,7 @@
   border-right: 1px solid #3c3c3c;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   transition: width 0.3s ease;
   flex-shrink: 0;
 }
