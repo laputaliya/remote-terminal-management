@@ -50,6 +50,13 @@
 - PTY `onExit` 需同时清理 `processes` 和 `outputBuffers` 两个 Map
 - 前端 `connect` 的 `useCallback` 依赖不能包含 `activeSessionIds.size`（会导致频繁重连）
 - cleanup 中先设 `wsRef.current = null` 再 `ws.close()`，防止 `onclose` 误触发重连
+- Terminal 在 flex 容器中用 `flex: 1; min-height: 0`，不用 `height: 100%`
+- `fitAddon.fit()` 等字体加载完再调（`document.fonts.ready`）
+- `session-attached` 可能重复到达，检查 `attached` 标志防止历史写两次
+- `attach` 的 setTimeout 必须在 effect cleanup 中 clear
+- 外部终端 attach 时 cols/rows 从 viewport 估算，不硬编码 80x24；`resizeReady` 立刻设 true
+- 移动端侧边栏初始自动收起（`window.innerWidth < 768`），选会话后自动关闭
+- 禁止原生 `confirm()`/`prompt()`，必须用 `Modal.jsx`
 
 ## 文件职责速查
 
@@ -61,6 +68,9 @@
 | `server/websocket-handler.js` | WebSocket 消息路由、会话 CRUD、外部终端 | `handleWebSocket`, `sessions` |
 | `server/sessions.js` | 会话 JSON 文件读写（原子写入） | `loadSessions`, `saveSessions` |
 | `server/external-processes.js` | tmux/screen/shell 进程检测与连接 | `getExternalTerminals`, `attachTmuxSession`, `attachScreenSession` |
-| `client/src/App.jsx` | WebSocket 连接、认证状态、布局状态管理 | — |
-| `client/src/components/Terminal.jsx` | xterm.js 终端渲染、自适应大小、可见性刷新 | — |
-| `client/src/components/MultiTerminal.jsx` | 多终端布局、快捷键、改密弹窗 | — |
+| `client/src/App.jsx` | WebSocket 连接、认证状态、布局状态、移动端侧边栏 | — |
+| `client/src/components/Terminal.jsx` | xterm.js 渲染、fit 时序、剪贴板、预附着缓冲 | — |
+| `client/src/components/MultiTerminal.jsx` | 多终端布局、快捷键、移动端汉堡菜单、改密弹窗 | — |
+| `client/src/components/Sidebar.jsx` | 会话列表、移动端滑入覆盖层 | — |
+| `client/src/components/ExternalTerminal.jsx` | 外部终端、tmux/screen 连接（viewport 估算尺寸） | — |
+| `client/src/components/Modal.jsx` | ConfirmModal / PromptModal（替代原生弹窗） | `ConfirmModal`, `PromptModal` |

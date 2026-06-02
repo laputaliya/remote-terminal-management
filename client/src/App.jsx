@@ -18,7 +18,9 @@ function App() {
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebar-collapsed') === 'true';
+    const saved = localStorage.getItem('sidebar-collapsed');
+    if (saved !== null) return saved === 'true';
+    return window.innerWidth < 768;
   });
   const [wsStatus, setWsStatus] = useState('disconnected');
   const [terminalLayout, setTerminalLayout] = useState(() => {
@@ -196,6 +198,10 @@ function App() {
       saveActiveSessionIds(newSet);
       return newSet;
     });
+    // 移动端选择会话后自动关闭侧边栏
+    if (window.innerWidth < 768 && !sidebarCollapsed) {
+      setSidebarCollapsed(true);
+    }
   };
 
   const handleRefresh = () => {
@@ -238,6 +244,9 @@ function App() {
 
   return (
     <div className="app">
+      {!sidebarCollapsed && (
+        <div className="sidebar-backdrop" onClick={handleToggleSidebar} />
+      )}
       <Sidebar
         sessions={filteredSessions}
         activeSessionIds={activeSessionIds}
@@ -265,6 +274,7 @@ function App() {
           onNavigateToExternal={() => setCurrentPage('external')}
           layout={terminalLayout}
           onLayoutChange={setTerminalLayout}
+          onToggleSidebar={handleToggleSidebar}
         />
       </main>
     </div>

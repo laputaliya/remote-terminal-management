@@ -59,26 +59,28 @@ function ExternalTerminal({ token, ws, onBack }) {
   }, [fetchData]);
 
   const handleAttachTmux = (sessionName) => {
-    console.log('Attaching to tmux session:', sessionName, 'ws state:', wsRef.current?.readyState);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Estimate terminal size from viewport so PTY starts close to correct dimensions
+      const estCols = Math.floor(window.innerWidth / 8);
+      const estRows = Math.floor((window.innerHeight - 60) / 17);
       wsRef.current.send(JSON.stringify({
         type: 'attach-tmux',
         sessionName,
-        cols: 80,
-        rows: 24
+        cols: Math.max(estCols, 80),
+        rows: Math.max(estRows, 24)
       }));
-    } else {
-      console.error('WebSocket not connected');
     }
   };
 
   const handleAttachScreen = (sessionName) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const estCols = Math.floor(window.innerWidth / 8);
+      const estRows = Math.floor((window.innerHeight - 60) / 17);
       wsRef.current.send(JSON.stringify({
         type: 'attach-screen',
         sessionName,
-        cols: 80,
-        rows: 24
+        cols: Math.max(estCols, 80),
+        rows: Math.max(estRows, 24)
       }));
     }
   };
@@ -139,7 +141,7 @@ function ExternalTerminal({ token, ws, onBack }) {
             </button>
           </div>
         </div>
-        <div className="external-content" style={{ padding: 0 }}>
+        <div className="external-content" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Terminal
             sessionId={selectedSession.id}
             ws={wsRef.current}

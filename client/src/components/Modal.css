@@ -102,3 +102,33 @@
 .btn-danger:hover {
   background: #b71c1c;
 }
+
+@media (max-width: 480px) {
+  .modal-content {
+    min-width: auto;
+    max-width: calc(100vw - 32px);
+    padding: 20px;
+    margin: 16px;
+    border-radius: 12px;
+  }
+
+  .modal-input {
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  .modal-message {
+    font-size: 15px;
+  }
+
+  .btn-secondary,
+  .btn-primary,
+  .btn-danger {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+
+  .modal-actions {
+    gap: 12px;
+  }
+}

@@ -14,7 +14,7 @@ const LAYOUTS = [
   { id: '3r', name: 'Left 2 Right 1', icon: '▢', maxTerminals: 3 },
 ];
 
-function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange }) {
+function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange, onToggleSidebar }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [closeTarget, setCloseTarget] = useState(null);
@@ -100,6 +100,13 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
     <div className="multi-terminal">
       <div className="terminal-toolbar">
         <div className="toolbar-left">
+          <button className="menu-toggle-btn" onClick={onToggleSidebar} title="菜单">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
           <div className="layout-selector">
             {LAYOUTS.map(l => (
               <button

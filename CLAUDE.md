@@ -53,6 +53,15 @@
 - PTY `onExit` 回调中需要同时清理 `processes` 和 `outputBuffers` 两个 Map
 - 前端 `connect` 的 `useCallback` 依赖数组不应包含 `activeSessionIds.size`（会导致每次选会话都重连 WebSocket）
 - `wsRef.current = null` 必须在 cleanup 中 `ws.close()` 之前设置，防止 `onclose` 回调误触发重连
+- Terminal 在 flex 容器中应使用 `flex: 1; min-height: 0`，不能用 `height: 100%`（百分比高度无法从 flex 父容器解析）
+- `fitAddon.fit()` 应在字体加载完成后调用（`document.fonts.ready`），否则字符尺寸测量不准导致终端显示过小
+- `session-attached` 可能重复到达，必须在 handler 中检查 `attached` 标志防止历史写入两次
+- `attach` 的 setTimeout 必须在 effect cleanup 中 clear，防止多实例残留
+- 外部终端连接时 cols/rows 应从 viewport 估算（`window.innerWidth/8`, `window.innerHeight/17`），不硬编码 80x24
+- 外部终端 `resizeReady` 应立刻设为 true（跳过 600ms 延迟），确保尺寸立即同步
+- 移动端侧边栏初始状态根据 `window.innerWidth < 768` 自动收起
+- 移动端选择会话后应自动关闭侧边栏（`handleSelectSession` 中检查屏幕宽度）
+- 禁止使用原生 `confirm()` / `prompt()`，必须用 `Modal.jsx` 中的 `ConfirmModal` / `PromptModal`
 
 ## 文件职责速查
 
@@ -64,6 +73,9 @@
 | `server/websocket-handler.js` | WebSocket 消息路由、会话 CRUD、外部终端连接 | `handleWebSocket`, `sessions` |
 | `server/sessions.js` | 会话 JSON 文件读写（原子写入） | `loadSessions`, `saveSessions` |
 | `server/external-processes.js` | tmux/screen/shell 进程检测、连接 | `getExternalTerminals`, `attachTmuxSession`, `attachScreenSession` |
-| `client/src/App.jsx` | WebSocket 连接管理、认证状态、布局状态 | — |
-| `client/src/components/Terminal.jsx` | xterm.js 终端渲染、自适应、输入/输出处理 | — |
-| `client/src/components/MultiTerminal.jsx` | 多终端布局管理、快捷键、改密弹窗 | — |
+| `client/src/App.jsx` | WebSocket 连接、认证状态、布局状态、移动端侧边栏自动关闭 | — |
+| `client/src/components/Terminal.jsx` | xterm.js 渲染、fit 时序、剪贴板、预附着缓冲 | — |
+| `client/src/components/MultiTerminal.jsx` | 多终端布局、快捷键、移动端汉堡菜单、改密弹窗 | — |
+| `client/src/components/Sidebar.jsx` | 会话列表、创建/删除/重命名、移动端滑入覆盖层 | — |
+| `client/src/components/ExternalTerminal.jsx` | 外部终端列表、tmux/screen 连接（viewport 估算尺寸） | — |
+| `client/src/components/Modal.jsx` | 通用 ConfirmModal / PromptModal（替代原生弹窗） | `ConfirmModal`, `PromptModal` |

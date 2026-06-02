@@ -358,3 +358,40 @@
 .session-status-icon.stopped {
   background: #808080;
 }
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 280px;
+    height: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s ease;
+    transform: translateX(0);
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+    width: 280px;
+  }
+
+  .sidebar-header {
+    padding: 12px;
+  }
+
+  .session-item {
+    padding: 12px;
+  }
+
+  .session-item-actions {
+    opacity: 1;
+  }
+
+  .create-btn {
+    padding: 12px;
+    font-size: 15px;
+  }
+}

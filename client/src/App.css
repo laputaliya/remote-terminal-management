@@ -139,21 +139,47 @@ body {
   color: #808080;
 }
 
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .app {
     flex-direction: column;
+    position: relative;
   }
 
-  .sidebar {
+  .main-content {
     width: 100%;
-    height: auto;
-    max-height: 40vh;
-    border-right: none;
-    border-bottom: 1px solid #3c3c3c;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 150;
   }
 
   .features {
     flex-direction: column;
     gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .no-session-content {
+    padding: 24px 16px;
+  }
+
+  .no-session-content h2 {
+    font-size: 18px;
+  }
+
+  .no-session-content p {
+    font-size: 13px;
   }
 }

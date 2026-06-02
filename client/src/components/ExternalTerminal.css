@@ -387,3 +387,45 @@
 .error-state p {
   font-size: 14px;
 }
+
+@media (max-width: 768px) {
+  .external-header {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .external-header h1 {
+    font-size: 13px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .back-btn,
+  .refresh-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .external-content {
+    padding: 12px;
+  }
+
+  .terminal-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .terminal-card {
+    padding: 12px;
+  }
+
+  .modal-content {
+    min-width: auto;
+    max-width: calc(100vw - 32px);
+    padding: 20px;
+    margin: 16px;
+  }
+}

@@ -1,7 +1,8 @@
 .terminal-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   background: #1e1e1e;
   border-radius: 8px;
   overflow: hidden;
@@ -109,4 +110,32 @@
 
 .terminal-body .xterm-screen {
   height: 100%;
+}
+
+@media (max-width: 768px) {
+  .terminal-header {
+    padding: 8px 10px;
+  }
+
+  .terminal-info {
+    gap: 6px;
+  }
+
+  .session-name {
+    font-size: 11px;
+  }
+
+  .session-shell {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+
+  .action-btn {
+    padding: 8px;
+  }
+
+  .action-btn svg {
+    width: 14px;
+    height: 14px;
+  }
 }

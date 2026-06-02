@@ -475,3 +475,121 @@
 .btn-primary:hover {
   background: #1177bb;
 }
+
+/* Mobile menu toggle */
+.menu-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.menu-toggle-btn:hover {
+  background: #3c3c3c;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .menu-toggle-btn {
+    display: flex;
+  }
+
+  .terminal-toolbar {
+    padding: 6px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left {
+    gap: 8px;
+  }
+
+  .layout-selector {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .layout-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .layout-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .toolbar-right {
+    gap: 4px;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .external-btn,
+  .change-password-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .external-btn svg,
+  .change-password-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .logout-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .terminal-grid {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .terminal-cell {
+    border-radius: 2px;
+  }
+
+  .cell-header {
+    padding: 4px 8px;
+  }
+
+  .cell-title {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .cell-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  .cell-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .cell-placeholder svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .cell-placeholder span {
+    font-size: 12px;
+  }
+
+  .focus-indicator {
+    display: none;
+  }
+}

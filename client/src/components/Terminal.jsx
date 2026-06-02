@@ -64,7 +64,18 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     terminal.loadAddon(fitAddon);
 
     terminal.open(terminalRef.current);
-    fitAddon.fit();
+
+    // 等待字体加载完成后 fit，防止字符尺寸测量不准导致终端显示过小
+    const doFit = () => {
+      requestAnimationFrame(() => {
+        if (fitAddonRef.current) fitAddonRef.current.fit();
+      });
+    };
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(doFit);
+    }
+    // 兜底：500ms 后无论如何 fit 一次
+    const fontFallbackTimer = setTimeout(doFit, 500);
 
     // 右键粘贴：无选中文本时粘贴剪贴板内容
     terminal.element.addEventListener('contextmenu', (e) => {
@@ -83,11 +94,10 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     fitAddonRef.current = fitAddon;
 
     // 等待 WebSocket 连接就绪后再发送消息
+    let attachTimeout = null;
     const sendAttach = () => {
       if (ws.readyState === WebSocket.OPEN) {
-        setTimeout(() => {
-          // 先发送 attach 获取历史输出，resize 由 ResizeObserver 触发
-          // 避免 resize 先于 attach 导致 shell 输出重复提示符
+        attachTimeout = setTimeout(() => {
           ws.send(JSON.stringify({
             type: 'attach',
             sessionId
@@ -137,10 +147,12 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       return true;
     });
 
+    // 初始化阶段不发送 resize，等页面布局稳定后再允许
+    let resizeReady = false;
     const handleResize = () => {
       if (fitAddonRef.current) {
         fitAddonRef.current.fit();
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocket.OPEN && resizeReady) {
           ws.send(JSON.stringify({
             type: 'resize',
             sessionId,
@@ -158,14 +170,12 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     // 页面可见性变化时刷新终端渲染（解决切屏后出现残影/闪烁问题）
     const refreshTerminal = () => {
       if (!fitAddonRef.current) return;
-      requestAnimationFrame(() => {
-        try {
-          fitAddonRef.current.fit();
-          terminal.refresh(0, terminal.rows - 1);
-        } catch (e) {
-          // ignore refresh errors during dispose
-        }
-      });
+      try {
+        fitAddonRef.current.fit();
+        terminal.refresh(0, terminal.rows - 1);
+      } catch (e) {
+        // ignore refresh errors during dispose
+      }
     };
 
     const handleVisibilityChange = () => {
@@ -181,10 +191,8 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     const scheduleRefresh = () => {
       if (refreshDebounce) clearTimeout(refreshDebounce);
       refreshDebounce = setTimeout(() => {
-        if (fitAddonRef.current && document.visibilityState === 'visible') {
-          requestAnimationFrame(() => {
-            try { terminal.refresh(0, terminal.rows - 1); } catch (e) {}
-          });
+        if (document.visibilityState === 'visible') {
+          try { terminal.refresh(0, terminal.rows - 1); } catch (e) {}
         }
       }, 150);
     };
@@ -204,6 +212,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         }
         scheduleRefresh();
       } else if (message.type === 'session-attached' && message.sessionId === sessionId) {
+        if (attached) return; // Already attached, ignore duplicate
         // Write history first, then flush buffered output
         if (message.history) {
           terminal.write(message.history);
@@ -214,6 +223,24 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         if (preAttachBuffer) {
           terminal.write(preAttachBuffer);
           preAttachBuffer = '';
+        }
+        // Allow resize events (external terminals sync size immediately)
+        if (isExternal) {
+          resizeReady = true;
+          if (fitAddonRef.current) {
+            fitAddonRef.current.fit();
+            ws.send(JSON.stringify({
+              type: 'resize',
+              sessionId,
+              cols: terminal.cols,
+              rows: terminal.rows
+            }));
+          }
+        } else {
+          setTimeout(() => {
+            resizeReady = true;
+            if (fitAddonRef.current) fitAddonRef.current.fit();
+          }, 600);
         }
         scheduleRefresh();
       } else if (message.type === 'session-updated') {
@@ -231,6 +258,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     ws.addEventListener('open', handleOpen);
 
     return () => {
+      fitAddonRef.current = null;
+      clearTimeout(fontFallbackTimer);
+      if (attachTimeout) clearTimeout(attachTimeout);
       ws.removeEventListener('message', handleMessage);
       ws.removeEventListener('close', handleClose);
       ws.removeEventListener('open', handleOpen);
