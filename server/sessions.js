@@ -1,3 +1,4 @@
+// 会话持久化模块：JSON 文件读写，使用原子写入防止数据损坏
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,6 +14,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// 从磁盘加载会话列表
 export function loadSessions() {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
@@ -25,6 +27,7 @@ export function loadSessions() {
   return [];
 }
 
+// 原子写入会话列表：先写临时文件再 rename，防止崩溃时损坏原文件
 export function saveSessions(sessions) {
   try {
     const tmpFile = SESSIONS_FILE + '.tmp';
@@ -35,6 +38,7 @@ export function saveSessions(sessions) {
   }
 }
 
+// 更新单个会话的指定字段
 export function updateSession(sessionId, updates) {
   const sessions = loadSessions();
   const index = sessions.findIndex(s => s.id === sessionId);

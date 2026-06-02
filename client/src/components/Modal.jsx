@@ -1,6 +1,8 @@
+// 通用模态框组件：确认弹窗和输入弹窗（替代原生 confirm/prompt）
 import { useState } from 'react';
 import './Modal.css';
 
+// 确认弹窗：显示消息和确定/取消按钮
 export function ConfirmModal({ message, onConfirm, onCancel }) {
   return (
     <div className="modal-overlay" onClick={onCancel}>

@@ -1,3 +1,4 @@
+// 侧边栏组件：会话列表、创建/删除/重命名、收起/展开
 import React, { useState } from 'react';
 import { ConfirmModal, PromptModal } from './Modal';
 import './Sidebar.css';

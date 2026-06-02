@@ -1,9 +1,21 @@
+// 外部终端进程管理：检测、连接 tmux/screen 会话和系统 shell 进程
 import { spawn, execSync, spawnSync } from 'child_process';
 import * as pty from 'node-pty';
 
-/**
- * Get list of tmux sessions
- */
+// 环境变量白名单，防止连接外部终端时泄露敏感信息
+const ALLOWED_ENV_KEYS = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'SHELL', 'TERM', 'COLORTERM'];
+
+function buildSafeEnv(extra = {}) {
+  const env = {};
+  for (const key of ALLOWED_ENV_KEYS) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+  return { ...env, ...extra };
+}
+
+// 获取当前用户的所有 tmux 会话列表
 export function getTmuxSessions() {
   try {
     // Check if tmux is available
@@ -35,9 +47,7 @@ export function getTmuxSessions() {
   }
 }
 
-/**
- * Get list of screen sessions
- */
+// 获取当前用户的所有 screen 会话列表
 export function getScreenSessions() {
   try {
     // Check if screen is available
@@ -74,9 +84,7 @@ export function getScreenSessions() {
   }
 }
 
-/**
- * Get list of user's shell processes (excluding this app's PTY processes)
- */
+// 获取当前用户的 shell 进程列表（排除本应用的 PTY 进程）
 export function getShellProcesses(currentPtyPids = []) {
   try {
     const username = process.env.USER || process.env.LOGNAME;
@@ -136,9 +144,7 @@ export function getShellProcesses(currentPtyPids = []) {
   }
 }
 
-/**
- * Get all external terminals/sessions
- */
+// 汇总所有外部终端信息（tmux + screen + shell 进程）
 export function getExternalTerminals(currentPtyPids = []) {
   const tmuxSessions = getTmuxSessions();
   const screenSessions = getScreenSessions();
@@ -152,41 +158,35 @@ export function getExternalTerminals(currentPtyPids = []) {
   };
 }
 
-/**
- * Attach to a tmux session - returns a PTY process
- */
+// 连接到已存在的 tmux 会话，返回 PTY 进程用于 WebSocket 桥接
 export function attachTmuxSession(sessionName, cols = 80, rows = 24) {
   const ptyProcess = pty.spawn('tmux', ['attach', '-d', '-t', sessionName], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
     cwd: process.env.HOME || process.env.USERPROFILE || '/',
-    env: {
-      ...process.env,
+    env: buildSafeEnv({
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      TMUX: '' // Clear TMUX env to allow attach from within tmux
-    }
+      TMUX: '' // 清除 TMUX 环境变量，允许从 tmux 内部连接到另一个 tmux
+    })
   });
 
   return ptyProcess;
 }
 
-/**
- * Attach to a screen session - returns a PTY process
- */
+// 连接到已存在的 screen 会话，返回 PTY 进程用于 WebSocket 桥接
 export function attachScreenSession(sessionName, cols = 80, rows = 24) {
   const ptyProcess = pty.spawn('screen', ['-r', sessionName], {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
     cwd: process.env.HOME || process.env.USERPROFILE || '/',
-    env: {
-      ...process.env,
+    env: buildSafeEnv({
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      STY: '' // Clear STY env
-    }
+      STY: '' // 清除 STY 环境变量，避免嵌套 screen 会话问题
+    })
   });
   return ptyProcess;
 }

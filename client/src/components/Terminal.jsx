@@ -1,3 +1,4 @@
+// 终端渲染组件：封装 xterm.js，处理输入/输出、尺寸调整、剪贴板、预附着缓冲
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -11,11 +12,12 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
   const fitAddonRef = useRef(null);
   const [isConnected, setIsConnected] = useState(true);
   const [sessionName, setSessionName] = useState(name || `Terminal ${sessionId.slice(0, 8)}`);
+  // 标记会话是否已附加，未附加前不发送输入（防止抢占 PTY）
   const isAttachedRef = useRef(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
 
-  // 暴露 focus 方法给父组件
+  // 暴露 focus 方法给父组件（支持快捷键切换时聚焦）
   useImperativeHandle(ref, () => ({
     focus: () => {
       if (xtermRef.current) {
@@ -24,10 +26,11 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     }
   }));
 
+  // 初始化 xterm.js 实例并绑定所有事件
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Reset attachment flag when ws changes (reconnect scenario)
+    // WebSocket 重连时重置附加标记
     isAttachedRef.current = false;
 
     const terminal = new XTerm({
@@ -65,7 +68,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
 
     terminal.open(terminalRef.current);
 
-    // 等待字体加载完成后 fit，防止字符尺寸测量不准导致终端显示过小
+    // 等待字体加载完成后再 fit，防止字符尺寸测量不准
     const doFit = () => {
       requestAnimationFrame(() => {
         if (fitAddonRef.current) fitAddonRef.current.fit();
@@ -74,10 +77,10 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     if (document.fonts?.ready) {
       document.fonts.ready.then(doFit);
     }
-    // 兜底：500ms 后无论如何 fit 一次
+    // 兜底：500ms 后无论如何执行一次 fit（字体 API 可能不可用）
     const fontFallbackTimer = setTimeout(doFit, 500);
 
-    // 右键粘贴：无选中文本时粘贴剪贴板内容
+    // 右键粘贴：只在无选中文本时触发，避免干扰浏览器右键菜单
     terminal.element.addEventListener('contextmenu', (e) => {
       const selection = terminal.getSelection();
       if (!selection) {
@@ -110,17 +113,15 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
 
     sendAttach();
 
+    // 用户键盘输入 -> WebSocket 发送到服务端（过滤 xterm.js 内部协议响应）
     terminal.onData((data) => {
       if (!isAttachedRef.current) return;
-      // Filter out xterm.js internal protocol responses to prevent garbage
-      // when multiple clients share the same PTY
+      // 过滤 CSI/OSC 响应序列，防止多客户端共享 PTY 时产生终端乱码
       if (data.startsWith('\x1b[')) {
-        // DA/DSR responses: CSI ?...c, CSI >...c, CSI ...n
         const csiResponse = /^\x1b\[(\?|>)?[0-9;]*[cn]$/;
         if (csiResponse.test(data)) return;
       }
       if (data.startsWith('\x1b]')) {
-        // OSC responses: OSC ... BEL or OSC ... ST
         const oscResponse = /^\x1b\][^\x07\x1b]*(\x07|\x1b\\)$/;
         if (oscResponse.test(data)) return;
       }
@@ -133,9 +134,9 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       }
     });
 
-    // 处理特殊按键和剪贴板快捷键
+    // 自定义键盘事件处理（剪贴板快捷键、Alt+数字/方向键）
     terminal.attachCustomKeyEventHandler((e) => {
-      // Ctrl+Shift+C: 复制选中文本（xterm 不支持，需手动处理）
+      // Ctrl+Shift+C: 手动复制选中文本（xterm.js 不原生支持此快捷键）
       if (e.type === 'keydown' && !e.repeat && e.ctrlKey && e.shiftKey && e.key === 'C') {
         const selection = terminal.getSelection();
         if (selection) {
@@ -143,8 +144,8 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         }
         return false;
       }
-      // Ctrl+Shift+V: xterm 原生支持粘贴，不拦截让其正常处理
-      // Alt + 数字键 或 Alt + 方向键 不阻止默认行为，让父组件处理
+      // Ctrl+Shift+V: xterm.js 原生支持粘贴，不拦截
+      // Alt + 数字键/方向键：放行让父组件处理布局切换
       if (e.altKey && (
         (e.key >= '0' && e.key <= '9') ||
         e.key === 'ArrowLeft' ||
@@ -157,7 +158,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       return true;
     });
 
-    // 初始化阶段不发送 resize，等页面布局稳定后再允许
+    // 初始化阶段不发 resize 事件，等 attach 完成后才允许（防止 PTY 尺寸抖动）
     let resizeReady = false;
     const handleResize = () => {
       if (fitAddonRef.current) {
@@ -177,7 +178,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(terminalRef.current);
 
-    // 页面可见性变化时刷新终端渲染（解决切屏后出现残影/闪烁问题）
+    // 页面可见性变化时刷新终端渲染（修复切屏/切标签页后的残影问题）
     const refreshTerminal = () => {
       if (!fitAddonRef.current) return;
       try {
@@ -196,7 +197,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     window.addEventListener('focus', refreshTerminal);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 输出后延迟刷新终端，修复 tmux 多客户端连接时的渲染残留
+    // 输出后延迟刷新终端（防抖 150ms），修复 tmux 多客户端渲染残留
     let refreshDebounce = null;
     const scheduleRefresh = () => {
       if (refreshDebounce) clearTimeout(refreshDebounce);
@@ -207,10 +208,11 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       }, 150);
     };
 
-    // Buffer output received before session-attached to avoid duplicate prompt on refresh
+    // 预附着缓冲区：暂存 attach 前收到的输出，避免刷新时出现重复提示符
     let preAttachBuffer = '';
     let attached = false;
 
+    // 处理 WebSocket 消息：输出内容写入终端，session-attached 触发历史和缓冲区回放
     const handleMessage = (event) => {
       const message = JSON.parse(event.data);
 
@@ -222,19 +224,18 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
         }
         scheduleRefresh();
       } else if (message.type === 'session-attached' && message.sessionId === sessionId) {
-        if (attached) return; // Already attached, ignore duplicate
-        // Write history first, then flush buffered output
+        if (attached) return; // 重复的 attach 消息忽略
+        // 先写入历史输出，再刷新预附着缓冲（保证时序）
         if (message.history) {
           terminal.write(message.history);
         }
         attached = true;
         isAttachedRef.current = true;
-        // Flush any output that arrived after the history was captured
         if (preAttachBuffer) {
           terminal.write(preAttachBuffer);
           preAttachBuffer = '';
         }
-        // Allow resize events (external terminals sync size immediately)
+        // 外部终端立即同步尺寸，内部终端延迟 600ms 等布局稳定
         if (isExternal) {
           resizeReady = true;
           if (fitAddonRef.current) {
@@ -267,6 +268,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     ws.addEventListener('close', handleClose);
     ws.addEventListener('open', handleOpen);
 
+    // 清理：移除所有事件监听器，销毁 xterm 实例
     return () => {
       fitAddonRef.current = null;
       clearTimeout(fontFallbackTimer);
@@ -289,12 +291,14 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
     setShowRenameModal(false);
   };
 
+  // 紧凑模式：仅渲染终端内容（用于多终端网格布局）
   if (compact) {
     return (
       <div className="terminal-body compact" ref={terminalRef}></div>
     );
   }
 
+  // 完整模式：带标题栏和控制按钮（用于外部终端和单视图）
   return (
     <div className="terminal-container">
       <div className="terminal-header">

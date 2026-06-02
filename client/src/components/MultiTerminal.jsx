@@ -1,8 +1,10 @@
+// 多终端布局组件：支持 1/2/3/4 分屏，快捷键切换，密码修改
 import { useState, useEffect, useRef } from 'react';
 import Terminal from './Terminal';
 import { ConfirmModal, PromptModal } from './Modal';
 import './MultiTerminal.css';
 
+// 预定义的终端布局配置
 const LAYOUTS = [
   { id: '1', name: 'Single', icon: '□', maxTerminals: 1 },
   { id: '2h', name: 'Horizontal Split', icon: '▦', maxTerminals: 2 },
@@ -21,15 +23,16 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
   const [renameTarget, setRenameTarget] = useState(null);
   const maxTerminals = LAYOUTS.find(l => l.id === layout)?.maxTerminals || 1;
   const isSingleMode = layout === '1';
+  // 存储各终端格子的 ref，用于快捷键聚焦
   const terminalRefs = useRef([]);
 
-  // 保存布局
+  // 切换布局并持久化
   const handleLayoutChange = (newLayout) => {
     onLayoutChange(newLayout);
     localStorage.setItem('terminal-layout', newLayout);
   };
 
-  // 当布局改变时，如果当前终端数超过新布局的最大值，裁剪多余的
+  // 布局改变时，裁剪超出容量的活跃终端
   useEffect(() => {
     const currentIds = Array.from(activeSessionIds);
     if (currentIds.length > maxTerminals) {
@@ -50,7 +53,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
     }
   };
 
-  // 快捷键支持
+  // 全局快捷键：Alt+数字切换终端格子，Alt+方向键移动聚焦
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Alt + 数字键 切换终端 (1-4)
@@ -149,7 +152,7 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
             修改密码
           </button>
           <button className="logout-btn" onClick={onLogout}>
-            Logout
+            退出
           </button>
         </div>
       </div>

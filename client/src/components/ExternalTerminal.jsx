@@ -1,3 +1,4 @@
+// 外部终端管理页面：列出并连接 tmux/screen/shell 进程
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Terminal from './Terminal';
 import './ExternalTerminal.css';
@@ -10,12 +11,12 @@ function ExternalTerminal({ token, ws, onBack }) {
   const [showDetailModal, setShowDetailModal] = useState(null);
   const wsRef = useRef(ws);
 
-  // Update wsRef when ws changes
+  // 同步 ws prop 到 ref（避免闭包过期问题）
   useEffect(() => {
     wsRef.current = ws;
   }, [ws]);
 
-  // Listen for WebSocket messages to handle session creation
+  // 监听 WebSocket 消息，收到 session-created 后自动选中新会话
   useEffect(() => {
     if (!ws) return;
 
@@ -58,9 +59,9 @@ function ExternalTerminal({ token, ws, onBack }) {
     fetchData();
   }, [fetchData]);
 
+  // 连接到 tmux 会话：从视口估算终端尺寸，使 PTY 初始尺寸接近实际
   const handleAttachTmux = (sessionName) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Estimate terminal size from viewport so PTY starts close to correct dimensions
       const estCols = Math.floor(window.innerWidth / 8);
       const estRows = Math.floor((window.innerHeight - 60) / 17);
       wsRef.current.send(JSON.stringify({
@@ -72,6 +73,7 @@ function ExternalTerminal({ token, ws, onBack }) {
     }
   };
 
+  // 连接到 screen 会话
   const handleAttachScreen = (sessionName) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const estCols = Math.floor(window.innerWidth / 8);
@@ -85,7 +87,7 @@ function ExternalTerminal({ token, ws, onBack }) {
     }
   };
 
-  // Handle detach - just disconnect without killing tmux/screen session
+  // 断开外部会话连接（不终止 tmux/screen 本身，只关闭 PTY 桥接）
   const handleDetachSession = (sessionId) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
@@ -96,7 +98,7 @@ function ExternalTerminal({ token, ws, onBack }) {
     setSelectedSession(null);
   };
 
-  // Handle return to external terminal list - detach if connected
+  // 返回列表：断开当前连接并回到列表视图
   const handleReturnToList = () => {
     if (selectedSession) {
       handleDetachSession(selectedSession.id);

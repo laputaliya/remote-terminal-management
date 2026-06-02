@@ -419,6 +419,23 @@
   }
 
   .terminal-card {
+    overflow: hidden;
+  }
+
+  .terminal-name {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+  }
+
+  .process-detail {
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  .terminal-card {
     padding: 12px;
   }
 
