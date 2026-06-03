@@ -67,6 +67,8 @@ for (const session of sessions) {
     }
   }
 }
+// 持久化恢复失败的会话状态，避免下次重启重复尝试
+saveSessionsFiltered();
 
 // 处理新 WebSocket 连接，注册消息路由
 export function handleWebSocket(ws, websocketServer, user) {

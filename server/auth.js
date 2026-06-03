@@ -61,8 +61,10 @@ function saveUsers(users) {
     const tmpFile = USERS_FILE + '.tmp';
     fs.writeFileSync(tmpFile, JSON.stringify(users, null, 2), 'utf-8');
     fs.renameSync(tmpFile, USERS_FILE);
+    return true;
   } catch (error) {
     console.error('Error saving users:', error);
+    return false;
   }
 }
 
@@ -87,8 +89,10 @@ function saveAuthSessions(sessions) {
     const tmpFile = SESSIONS_FILE + '.tmp';
     fs.writeFileSync(tmpFile, JSON.stringify(sessions, null, 2), 'utf-8');
     fs.renameSync(tmpFile, SESSIONS_FILE);
+    return true;
   } catch (error) {
     console.error('Error saving auth sessions:', error);
+    return false;
   }
 }
 
@@ -183,8 +187,7 @@ export function changePassword(userId, oldPassword, newPassword) {
   user.salt = salt;
   user.hash = hash;
   delete user.passwordChangeRequired;
-  saveUsers(users);
-  return true;
+  return saveUsers(users);
 }
 
 // 定期清理过期的认证会话（由心跳定时器触发）

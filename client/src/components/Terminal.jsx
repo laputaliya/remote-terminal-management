@@ -283,7 +283,7 @@ const Terminal = forwardRef(({ sessionId, ws, onClose, onRename, shell, compact 
       resizeObserver.disconnect();
       terminal.dispose();
     };
-  }, [sessionId, ws]);
+  }, [sessionId, ws, isExternal]);
 
   const handleRename = (newName) => {
     onRename(sessionId, newName);

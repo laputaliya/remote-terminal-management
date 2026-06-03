@@ -87,6 +87,13 @@ const interval = setInterval(() => {
     ws.ping();
   });
   cleanupSessions();
+  // 清理过期的速率限制条目，防止内存无限增长
+  const now = Date.now();
+  for (const [ip, entry] of loginAttempts.entries()) {
+    if (now - entry.start > LOGIN_RATE_LIMIT.windowMs) {
+      loginAttempts.delete(ip);
+    }
+  }
 }, 30000);
 
 wss.on('close', () => {
@@ -160,23 +167,20 @@ app.post('/api/sessions', authMiddleware, (req, res) => {
 // DELETE /api/sessions/:id - 删除指定会话
 app.delete('/api/sessions/:id', authMiddleware, (req, res) => {
   const { id } = req.params;
-  const sessions = loadSessions();
-  const index = sessions.findIndex(s => s.id === id);
 
+  // 以内存中的会话列表为准，避免磁盘数据滞后导致不一致
+  const index = wsSessions.findIndex(s => s.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'Session not found' });
   }
 
-  // 同时清理 PTY 进程和内存中的会话记录
   killPty(id);
-
-  const wsIndex = wsSessions.findIndex(s => s.id === id);
-  if (wsIndex !== -1) {
-    wsSessions.splice(wsIndex, 1);
-  }
-
-  sessions.splice(index, 1);
-  saveSessions(sessions);
+  wsSessions.splice(index, 1);
+  // 将内存中的会话同步到磁盘
+  const nonExternal = wsSessions.filter(s =>
+    s.type !== 'tmux-external' && s.type !== 'screen-external'
+  );
+  saveSessions(nonExternal);
   res.json({ success: true });
 });
 

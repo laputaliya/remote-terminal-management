@@ -1,5 +1,5 @@
 // 外部终端进程管理：检测、连接 tmux/screen 会话和系统 shell 进程
-import { spawn, execSync, spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as pty from 'node-pty';
 
 // 环境变量白名单，防止连接外部终端时泄露敏感信息
@@ -18,18 +18,19 @@ function buildSafeEnv(extra = {}) {
 // 获取当前用户的所有 tmux 会话列表
 export function getTmuxSessions() {
   try {
-    // Check if tmux is available
-    execSync('which tmux', { encoding: 'utf-8' });
-    
-    // List sessions: format session_name:window_count:attached_count
-    const output = execSync('tmux list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}" 2>/dev/null || echo ""', {
+    // 检查 tmux 是否可用
+    const whichResult = spawnSync('which', ['tmux'], { encoding: 'utf-8', timeout: 5000 });
+    if (whichResult.status !== 0) return [];
+
+    // 列出会话：格式 session_name:window_count:attached_count
+    const result = spawnSync('tmux', ['list-sessions', '-F', '#{session_name}:#{session_windows}:#{session_attached}'], {
       encoding: 'utf-8',
       timeout: 5000
     });
-    
-    if (!output.trim()) return [];
-    
-    const sessions = output.trim().split('\n').map(line => {
+
+    if (result.error || !result.stdout || !result.stdout.trim()) return [];
+
+    const sessions = result.stdout.trim().split('\n').map(line => {
       const [name, windows, attached] = line.split(':');
       return {
         type: 'tmux',
@@ -39,10 +40,9 @@ export function getTmuxSessions() {
         status: parseInt(attached || '0', 10) > 0 ? 'attached' : 'detached'
       };
     });
-    
+
     return sessions;
   } catch (error) {
-    // tmux not installed or no sessions
     return [];
   }
 }
@@ -50,14 +50,18 @@ export function getTmuxSessions() {
 // 获取当前用户的所有 screen 会话列表
 export function getScreenSessions() {
   try {
-    // Check if screen is available
-    execSync('which screen', { encoding: 'utf-8' });
-    
-    // List screen sessions
-    const output = execSync('screen -ls 2>/dev/null || echo ""', {
+    // 检查 screen 是否可用
+    const whichResult = spawnSync('which', ['screen'], { encoding: 'utf-8', timeout: 5000 });
+    if (whichResult.status !== 0) return [];
+
+    // 列出 screen 会话
+    const result = spawnSync('screen', ['-ls'], {
       encoding: 'utf-8',
       timeout: 5000
     });
+
+    if (result.error) return [];
+    const output = result.stderr || result.stdout || '';
     
     if (!output.trim()) return [];
     
