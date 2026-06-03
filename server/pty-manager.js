@@ -7,6 +7,12 @@ const processes = new Map();
 const outputBuffers = new Map();
 const MAX_BUFFER_SIZE = 100000;
 let broadcastCallback = null;
+let exitCallback = null;
+
+// 设置会话退出回调，通知 websocket-handler 清理会话
+export function setExitCallback(callback) {
+  exitCallback = callback;
+}
 
 // 允许传递给子进程的环境变量白名单，防止泄露敏感信息
 const ALLOWED_ENV_KEYS = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'SHELL', 'TERM', 'COLORTERM'];
@@ -109,6 +115,7 @@ export function createPty(id, shell = null) {
       console.log(`Session ${sessionId} exited with code ${exitCode}, signal ${signal}`);
       processes.delete(sessionId);
       outputBuffers.delete(sessionId);
+      if (exitCallback) exitCallback(sessionId);
     });
 
     return sessionId;

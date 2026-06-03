@@ -1,6 +1,6 @@
 // WebSocket 消息处理器：会话 CRUD、终端输入/输出、外部终端连接
 import { loadSessions, saveSessions } from './sessions.js';
-import { createPty, writeToPty, resizePty, killPty, setBroadcastCallback, getOutputHistory } from './pty-manager.js';
+import { createPty, writeToPty, resizePty, killPty, setBroadcastCallback, setExitCallback, getOutputHistory } from './pty-manager.js';
 import { getExternalTerminals, attachTmuxSession, attachScreenSession } from './external-processes.js';
 import { spawnSync } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
@@ -54,6 +54,20 @@ function broadcastToSession(sessionId, data) {
 
 // 设置 PTY 的广播回调，使 PTY 输出能推送到所有客户端
 setBroadcastCallback(broadcastToSession);
+
+// PTY 进程退出时通知所有客户端清理会话
+setExitCallback((sessionId) => {
+  const session = sessions.find(s => s.id === sessionId);
+  if (session) {
+    session.status = 'disconnected';
+    saveSessionsFiltered();
+    wss?.clients.forEach(client => {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify({ type: 'session-deleted', sessionId }));
+      }
+    });
+  }
+});
 
 // 服务启动时恢复之前保存的运行中会话
 for (const session of sessions) {
