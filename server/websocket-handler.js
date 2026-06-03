@@ -55,11 +55,11 @@ function broadcastToSession(sessionId, data) {
 // 设置 PTY 的广播回调，使 PTY 输出能推送到所有客户端
 setBroadcastCallback(broadcastToSession);
 
-// PTY 进程退出时通知所有客户端清理会话
+// PTY 进程退出时从会话列表中移除并通知所有客户端
 setExitCallback((sessionId) => {
-  const session = sessions.find(s => s.id === sessionId);
-  if (session) {
-    session.status = 'disconnected';
+  const index = sessions.findIndex(s => s.id === sessionId);
+  if (index !== -1) {
+    sessions.splice(index, 1);
     saveSessionsFiltered();
     wss?.clients.forEach(client => {
       if (client.readyState === 1) {
