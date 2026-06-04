@@ -1,0 +1,130 @@
+.upload-modal-content {
+  min-width: 420px;
+  max-width: 520px;
+}
+
+.upload-body {
+  padding: 20px;
+}
+
+.upload-drop-zone {
+  border: 2px dashed #555;
+  border-radius: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 16px;
+}
+
+.upload-drop-zone:hover {
+  border-color: #007acc;
+  background: rgba(0, 122, 204, 0.05);
+}
+
+.upload-drop-zone.drag-over {
+  border-color: #007acc;
+  background: rgba(0, 122, 204, 0.1);
+}
+
+.upload-drop-zone.has-file {
+  border-style: solid;
+  border-color: #3c3c3c;
+  padding: 16px 20px;
+}
+
+.upload-drop-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+.upload-drop-placeholder svg {
+  opacity: 0.4;
+}
+
+.upload-file-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-file-name {
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.upload-file-size {
+  color: #808080;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.upload-form-group {
+  margin-bottom: 16px;
+}
+
+.upload-form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #ccc;
+}
+
+.upload-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.upload-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #3c3c3c;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: #007acc;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.upload-progress-text {
+  color: #808080;
+  font-size: 12px;
+  min-width: 36px;
+  text-align: right;
+}
+
+.upload-success {
+  padding: 20px;
+}
+
+.upload-success .modal-actions {
+  margin-top: 16px;
+}
+
+@media (max-width: 480px) {
+  .upload-modal-content {
+    min-width: auto;
+    max-width: calc(100vw - 32px);
+  }
+
+  .upload-body {
+    padding: 16px;
+  }
+
+  .upload-drop-zone {
+    padding: 24px 16px;
+  }
+}

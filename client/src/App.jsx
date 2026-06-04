@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import MultiTerminal from './components/MultiTerminal';
 import ExternalTerminal from './components/ExternalTerminal';
+import FileExplorer from './components/FileExplorer';
 import Login from './components/Login';
 import './App.css';
 
@@ -25,6 +26,9 @@ function App() {
     const saved = localStorage.getItem('sidebar-collapsed');
     if (saved !== null) return saved === 'true';
     return window.innerWidth < 768;
+  });
+  const [fileExplorerVisible, setFileExplorerVisible] = useState(() => {
+    return localStorage.getItem('file-explorer-visible') === 'true';
   });
   const [wsStatus, setWsStatus] = useState('disconnected');
   const [terminalLayout, setTerminalLayout] = useState(() => {
@@ -291,8 +295,31 @@ function App() {
           layout={terminalLayout}
           onLayoutChange={setTerminalLayout}
           onToggleSidebar={handleToggleSidebar}
+          fileExplorerVisible={fileExplorerVisible}
+          onToggleFileExplorer={() => {
+            const next = !fileExplorerVisible;
+            setFileExplorerVisible(next);
+            localStorage.setItem('file-explorer-visible', String(next));
+          }}
+          token={token}
         />
       </main>
+      {fileExplorerVisible && (
+        <>
+          <div className="sidebar-backdrop file-explorer-backdrop" onClick={() => {
+            setFileExplorerVisible(false);
+            localStorage.setItem('file-explorer-visible', 'false');
+          }} />
+          <FileExplorer
+            token={token}
+            visible={fileExplorerVisible}
+            onToggle={() => {
+              setFileExplorerVisible(false);
+              localStorage.setItem('file-explorer-visible', 'false');
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

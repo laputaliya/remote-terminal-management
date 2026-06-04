@@ -16,7 +16,7 @@ const LAYOUTS = [
   { id: '3r', name: 'Left 2 Right 1', icon: '▢', maxTerminals: 3 },
 ];
 
-function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange, onToggleSidebar }) {
+function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSession, onDeleteSession, onRenameSession, ws, username, onLogout, onChangePassword, onNavigateToExternal, layout, onLayoutChange, onToggleSidebar, token, fileExplorerVisible, onToggleFileExplorer }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [closeTarget, setCloseTarget] = useState(null);
@@ -139,6 +139,16 @@ function MultiTerminal({ sessions, activeSessionIds, onSelectSession, onCreateSe
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             外部终端
+          </button>
+          <button
+            className={`explorer-toggle-btn ${fileExplorerVisible ? 'active' : ''}`}
+            onClick={onToggleFileExplorer}
+            title="文件管理"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            文件管理
           </button>
           <button
             className="change-password-btn"

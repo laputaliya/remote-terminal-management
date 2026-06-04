@@ -6,6 +6,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { handleWebSocket, sessions as wsSessions } from './websocket-handler.js';
 import { loadSessions, saveSessions } from './sessions.js';
@@ -24,6 +26,38 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000' }));
 app.use(express.json({ limit: '100kb' }));
+
+const uploadDir = path.join(os.tmpdir(), 'rtm-uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true, mode: 0o700 });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      const safeName = path.basename(file.originalname).replace(/\0/g, '');
+      cb(null, `${Date.now()}-${safeName}`);
+    }
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 }
+});
+
+// 允许访问的目录根路径白名单
+const ALLOWED_FS_ROOTS = ['/', os.homedir(), '/tmp'];
+
+function isPathWithinAllowed(targetPath) {
+  try {
+    const resolved = path.resolve(targetPath);
+    const real = fs.realpathSync(resolved);
+    return ALLOWED_FS_ROOTS.some(root => {
+      const rel = path.relative(root, real);
+      return !rel.startsWith('..') && !path.isAbsolute(rel);
+    });
+  } catch {
+    return false;
+  }
+}
 
 // 初始化默认管理员用户（首次运行自动创建）
 initDefaultUser();
@@ -94,11 +128,51 @@ const interval = setInterval(() => {
       loginAttempts.delete(ip);
     }
   }
+  for (const [userId, entry] of uploadAttempts.entries()) {
+    if (now - entry.start > UPLOAD_RATE_LIMIT.windowMs) {
+      uploadAttempts.delete(userId);
+    }
+  }
+  for (const [userId, entry] of listAttempts.entries()) {
+    if (now - entry.start > LIST_RATE_LIMIT.windowMs) {
+      listAttempts.delete(userId);
+    }
+  }
 }, 30000);
 
 wss.on('close', () => {
   clearInterval(interval);
 });
+
+// 上传速率限制：每用户每分钟最多 20 次
+const uploadAttempts = new Map();
+const UPLOAD_RATE_LIMIT = { windowMs: 60000, maxAttempts: 20 };
+
+function checkUploadRateLimit(userId) {
+  const now = Date.now();
+  const entry = uploadAttempts.get(userId);
+  if (!entry || now - entry.start > UPLOAD_RATE_LIMIT.windowMs) {
+    uploadAttempts.set(userId, { start: now, count: 1 });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= UPLOAD_RATE_LIMIT.maxAttempts;
+}
+
+// 目录列表速率限制：每用户每分钟最多 120 次
+const listAttempts = new Map();
+const LIST_RATE_LIMIT = { windowMs: 60000, maxAttempts: 120 };
+
+function checkListRateLimit(userId) {
+  const now = Date.now();
+  const entry = listAttempts.get(userId);
+  if (!entry || now - entry.start > LIST_RATE_LIMIT.windowMs) {
+    listAttempts.set(userId, { start: now, count: 1 });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= LIST_RATE_LIMIT.maxAttempts;
+}
 
 // 登录速率限制：每 IP 每分钟最多 10 次尝试
 const loginAttempts = new Map();
@@ -204,6 +278,153 @@ app.get('/api/external-terminals', authMiddleware, (req, res) => {
   } catch (error) {
     console.error('Error getting external terminals:', error);
     res.status(500).json({ error: 'Failed to get external terminals' });
+  }
+});
+
+// POST /api/upload - 文件上传
+app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
+  if (!checkUploadRateLimit(req.user.userId)) {
+    return res.status(429).json({ error: 'Too many upload requests. Please try again later.' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file provided' });
+  }
+
+  try {
+    let targetDir = req.body.targetDir;
+    if (!targetDir || typeof targetDir !== 'string' || targetDir.trim() === '') {
+      targetDir = os.homedir();
+    }
+
+    if (!isPathWithinAllowed(targetDir)) {
+      return res.status(403).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    const resolved = path.resolve(targetDir);
+
+    if (!fs.existsSync(resolved)) {
+      return res.status(400).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    try {
+      fs.accessSync(resolved, fs.constants.W_OK);
+    } catch {
+      return res.status(403).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    let filename = path.basename(req.file.originalname).replace(/\0/g, '');
+    if (!filename || filename === '.' || filename === '..' || filename.length > 255) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    const uploadedPath = req.file.path;
+    let fullPath = path.join(resolved, filename);
+
+    if (fs.existsSync(fullPath)) {
+      const ext = path.extname(filename);
+      const base = filename.slice(0, -ext.length || undefined);
+      let counter = 1;
+      let found = false;
+      while (counter <= 1000) {
+        const newName = `${base} (${counter})${ext}`;
+        fullPath = path.join(resolved, newName);
+        if (!fs.existsSync(fullPath)) {
+          filename = newName;
+          found = true;
+          break;
+        }
+        counter++;
+      }
+      if (!found) {
+        return res.status(500).json({ error: 'Could not generate unique filename' });
+      }
+    }
+
+    fs.copyFileSync(uploadedPath, fullPath);
+    try { fs.unlinkSync(uploadedPath); } catch { }
+    res.json({ success: true, filePath: fullPath, filename });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+// GET /api/fs/list - 列出目录内容
+app.get('/api/fs/list', authMiddleware, (req, res) => {
+  if (!checkListRateLimit(req.user.userId)) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+
+  try {
+    let targetDir = req.query.dir;
+    if (!targetDir || typeof targetDir !== 'string' || targetDir.trim() === '') {
+      targetDir = os.homedir();
+    }
+
+    if (!isPathWithinAllowed(targetDir)) {
+      return res.status(403).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    const resolved = path.resolve(targetDir);
+
+    if (!fs.existsSync(resolved)) {
+      return res.status(400).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: 'Invalid or inaccessible directory' });
+    }
+
+    const showHidden = req.query.showHidden === 'true';
+    const entries = fs.readdirSync(resolved, { withFileTypes: true });
+    const items = [];
+
+    for (const entry of entries) {
+      if (!showHidden && entry.name.startsWith('.')) continue;
+
+      const result = { name: entry.name, type: 'unknown', size: null, mtime: null };
+
+      try {
+        const fullPath = path.join(resolved, entry.name);
+        const entryStat = fs.statSync(fullPath);
+        result.mtime = entryStat.mtime.toISOString();
+
+        if (entry.isDirectory()) {
+          result.type = 'directory';
+        } else if (entry.isFile()) {
+          result.type = 'file';
+          result.size = entryStat.size;
+        } else if (entry.isSymbolicLink()) {
+          try {
+            const targetStat = fs.statSync(fullPath);
+            result.type = targetStat.isDirectory() ? 'directory' : 'file';
+            if (targetStat.isFile()) result.size = targetStat.size;
+          } catch {
+            result.type = 'symlink';
+          }
+        }
+      } catch { }
+
+      items.push(result);
+    }
+
+    items.sort((a, b) => {
+      if (a.type === 'directory' && b.type !== 'directory') return -1;
+      if (a.type !== 'directory' && b.type === 'directory') return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    res.json({ dir: resolved, items });
+  } catch (error) {
+    console.error('Error listing directory:', error);
+    res.status(500).json({ error: 'Failed to list directory' });
   }
 });
 

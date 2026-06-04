@@ -154,7 +154,8 @@ body {
     width: 100%;
   }
 
-  .sidebar-backdrop {
+  .sidebar-backdrop,
+  .file-explorer-backdrop {
     display: block;
     position: fixed;
     top: 0;
@@ -163,6 +164,10 @@ body {
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 150;
+  }
+
+  .file-explorer-backdrop {
+    z-index: 998;
   }
 
   .features {
